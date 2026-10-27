@@ -64,20 +64,18 @@ html[data-theme="dark"] .bt,.bt.s{background:var(--pr2);color:var(--pr)}
 .label svg{width:100%;height:60px;display:block}
 .label .cod{font-size:22px;font-weight:700;border:2px solid #000;padding:2px 10px;text-align:center;margin-top:8px}
 .la{display:flex;gap:8px;justify-content:center;margin-top:10px}
+.lg{max-width:380px;margin:40px auto}.lg input{margin-bottom:12px}.lg .bt{width:100%}#who{margin-inline-start:auto;display:flex;gap:8px;align-items:center;font-size:14px}
 @media print{body>*:not(#lbl){display:none!important}#lbl{position:static;background:none;display:block}.la{display:none}.label{max-width:none;border-width:2px}}
 @media(prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 </head>
 <body>
 <header><div class="in">
-<div class="brand"><h1>مسار</h1><span>إدارة شركة الشحن</span></div>
-<nav>
-<button data-v="dash" onclick="go('dash')">لوحة التحكم</button>
-<button data-v="list" onclick="go('list')">الشحنات</button>
-<button data-v="neu" onclick="go('neu')">شحنة جديدة</button>
-<button data-v="trk" onclick="go('trk')">تتبع شحنة</button>
-<button data-v="cou" onclick="go('cou')">المناديب</button>
-</nav></div></header>
+<div class="brand"><h1>مسار</h1><span>إدارة شركة الشحن</span><div id="who"></div></div>
+<nav id="nav"></nav></div></header>
 <main class="in" id="app"></main>
 <div id="toast"></div>
 <div id="lbl"><div><div class="label" id="lblbody"></div><div class="la"><button class="bt" onclick="window.print()">طباعة البوليصة</button><button class="bt s" onclick="$('#lbl').classList.remove('on')">إغلاق</button></div></div></div>
@@ -93,31 +91,28 @@ const num=n=>Number(n||0).toLocaleString("ar-EG");
 const money=n=>num(n)+" ج.م";
 const fdt=t=>new Date(t).toLocaleString("ar-EG",{dateStyle:"medium",timeStyle:"short"});
 const price=(z,w,cod)=>ZN[z][1]+Math.max(0,Math.ceil(w||1)-1)*8+Math.round((cod||0)*0.02);
-function seed(){
-  const n=Date.now(),h=36e5;
-  const mk=(i,sn,rn,rp,city,z,w,cod,cid,p)=>({id:"MS-"+(100000+i),sn,sp:"01000000"+(100+i),rn,rp,city,z,w,cod,fee:price(z,w,cod),cid,st:p[p.length-1][0],h:p.map(([s,a])=>({s,t:n-a*h}))});
-  return{n:7,c:[{id:1,n:"محمود سعيد",p:"01012345678",a:"القاهرة"},{id:2,n:"أحمد عادل",p:"01123456789",a:"الإسكندرية"},{id:3,n:"يوسف حسن",p:"01234567890",a:"الصعيد"}],
-  s:[mk(1,"متجر النيل","سارة محمد","01055550001","مدينة نصر، القاهرة",0,1.5,450,1,[["new",30],["picked",26],["hub",20],["out",3]]),
-  mk(2,"بيت الأزياء","هالة فؤاد","01155550002","سموحة، الإسكندرية",1,2,0,2,[["new",50],["picked",44],["hub",30],["out",6],["done",2]]),
-  mk(3,"مكتبة المعرفة","كريم رأفت","01255550003","أسيوط",3,4,1200,3,[["new",12],["picked",8]]),
-  mk(4,"إلكترونيات الشرق","منى إبراهيم","01055550004","بورسعيد",2,1,800,2,[["new",5]]),
-  mk(5,"متجر النيل","ياسر جمال","01155550005","الدقي، الجيزة",0,1,300,1,[["new",70],["picked",66],["hub",50],["out",30],["ret",24]]),
-  mk(6,"عطور الشام","داليا نبيل","01255550006","طنطا",1,3,650,2,[["new",9],["picked",5],["hub",2]])]};
-}
-let D;try{D=JSON.parse(localStorage.getItem(KEY))}catch(e){}
-if(!D||!D.s)D=seed();
-const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}};
+// ضع إعدادات مشروع Firebase هنا (Project settings > Your apps > Web)
+const FB={apiKey:"",authDomain:"",projectId:"",appId:""};
+const D={u:[],c:[],s:[]};
+let RS=[],FN={},db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
+const mail=u=>u.toLowerCase()+"@masar.app";
 let V="dash",Q="",F="",TR="";
 const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
 const go=v=>{V=v;render();scrollTo(0,0)};
 function render(){
-  document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.v===V));
-  $("#app").innerHTML=({dash,list,neu,trk,cou})[V]();
+  if(!FB.apiKey)V="cfg";
+  else if(!READY)V="wait";
+  else if(!ME)V=SETUP?"login":"setup";
+  else if(!can(V))V=tabs()[0];
+  const on=!!ME;
+  $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
+  $("#who").innerHTML=on?`${esc(ME.name)} <span class="bd" style="color:var(--pr)">${ROLE[ME.role]}</span> <button class="bt s" onclick="myPw()">كلمة السر</button> <button class="bt s" onclick="auth.signOut()">خروج</button>`:"";
+  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr})[V]();
   if(V==="neu")calc();
 }
 const cname=id=>(D.c.find(c=>c.id==id)||{n:"غير مُسند"}).n;
 function rows(S){
-  return S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)}</div></td><td>${badge(x.st)}</td><td>${esc(cname(x.cid))}</td><td>${x.cod?money(x.cod):"—"}</td></tr>`).join("")||`<tr><td colspan="5" class="mu">لا توجد شحنات مطابقة.</td></tr>`;
+  return S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)}</div></td><td>${badge(x.st)}</td><td>${esc(cname(x.cid))}</td>${cm()?`<td>${x.cod?money(x.cod):"—"}</td>`:""}</tr>`).join("")||`<tr><td colspan="5" class="mu">لا توجد شحنات مطابقة.</td></tr>`;
 }
 function dash(){
   const S=D.s,c=k=>S.filter(x=>x.st===k).length;
@@ -128,10 +123,10 @@ function dash(){
   const leg=ST.map(s=>`<span><b style="background:${s[2]}"></b>${s[1]}: ${num(c(s[0]))}</span>`).join("");
   const load=D.c.map(k=>`<div class="st"><b style="font-size:16px">${esc(k.n)}</b><small>${num(S.filter(x=>x.cid==k.id&&x.st==="out").length)} شحنة خرجت للتسليم</small></div>`).join("");
   return`<h2>لوحة التحكم</h2>
-  <div class="stats"><div class="st"><small>إجمالي الشحنات</small><b>${num(S.length)}</b></div><div class="st"><small>قيد التنفيذ</small><b>${num(act)}</b></div><div class="st"><small>تم تسليمها</small><b>${num(c("done"))}</b></div><div class="st"><small>إيراد الشحن</small><b>${money(fees)}</b></div><div class="st"><small>تحصيل عند الاستلام (مُسلَّم)</small><b>${money(cod)}</b></div></div>
+  <div class="stats"><div class="st"><small>إجمالي الشحنات</small><b>${num(S.length)}</b></div><div class="st"><small>قيد التنفيذ</small><b>${num(act)}</b></div><div class="st"><small>تم تسليمها</small><b>${num(c("done"))}</b></div>${cm()?`<div class="st"><small>إيراد الشحن</small><b>${money(fees)}</b></div><div class="st"><small>تحصيل عند الاستلام (مُسلَّم)</small><b>${money(cod)}</b></div>`:""}</div>
   <div class="box"><b>مراحل الشحنات الآن</b><div class="pipe">${bar}</div><div class="leg">${leg}</div></div>
   <div class="box"><b>حمل المناديب اليوم</b><div class="cg">${load}</div></div>
-  <div class="box"><b>آخر الشحنات</b><div class="tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th><th>التحصيل</th></tr>${rows([...S].reverse().slice(0,5))}</table></div></div>`;
+  <div class="box"><b>آخر الشحنات</b><div class="tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th>${cm()?"<th>التحصيل</th>":""}</tr>${rows([...S].reverse().slice(0,5))}</table></div></div>`;
 }
 function list(){
   const q=Q.trim().toLowerCase();
@@ -139,13 +134,15 @@ function list(){
   const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)} · ${esc(x.rp)}</div></td>
   <td><select aria-label="الحالة" onchange="setSt('${x.id}',this.value)">${ST.map(s=>`<option value="${s[0]}"${s[0]===x.st?" selected":""}>${s[1]}</option>`).join("")}</select></td>
   <td><select aria-label="المندوب" onchange="setCou('${x.id}',this.value)"><option value="">غير مُسند</option>${D.c.map(k=>`<option value="${k.id}"${k.id==x.cid?" selected":""}>${esc(k.n)}</option>`).join("")}</select></td>
-  <td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td><td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button></td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
+  ${cm()?`<td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td>`:""}<td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button></td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
   return`<h2>الشحنات (${num(S.length)})</h2><div class="bar"><input id="q" placeholder="ابحث بالرقم أو الاسم أو الهاتف أو المدينة" value="${esc(Q)}" oninput="Q=this.value;keep()"><select onchange="F=this.value;render()"><option value="">كل الحالات</option>${ST.map(s=>`<option value="${s[0]}"${s[0]===F?" selected":""}>${s[1]}</option>`).join("")}</select></div>
-  <div class="box tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th><th>التحصيل</th><th></th></tr>${tr}</table></div>`;
+  <div class="box tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th>${cm()?"<th>التحصيل</th>":""}<th></th></tr>${tr}</table></div>`;
 }
 function keep(){const p=$("#q").selectionStart;render();const e=$("#q");e.focus();e.setSelectionRange(p,p)}
-function setSt(id,s){const x=D.s.find(z=>z.id===id);x.st=s;x.h.push({s,t:Date.now()});save();toast("تم تحديث الحالة");render()}
-function setCou(id,c){D.s.find(z=>z.id===id).cid=c?+c:null;save();toast("تم إسناد الشحنة")}
+const FV=()=>firebase.firestore.FieldValue;
+const fail=e=>toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال");
+function setSt(id,s){if(!can("list"))return;db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>toast("تم تحديث الحالة"),fail)}
+function setCou(id,c){if(!can("list"))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
 function neu(){
   return`<h2>شحنة جديدة</h2><div class="box"><div class="fg">
   <div><label>اسم المرسل</label><input id="sn"></div><div><label>هاتف المرسل</label><input id="sp" inputmode="tel"></div>
@@ -154,24 +151,30 @@ function neu(){
   <div><label>العنوان بالتفصيل</label><input id="ct"></div>
   <div><label>الوزن (كجم)</label><input id="w" type="number" min="0.1" step="0.1" value="1" oninput="calc()"></div>
   <div><label>المبلغ المطلوب تحصيله (ج.م)</label><input id="cd" type="number" min="0" value="0" oninput="calc()"></div>
-  <div><label>المندوب</label><select id="cu"><option value="">إسناد لاحقًا</option>${D.c.map(k=>`<option value="${k.id}">${esc(k.n)}</option>`).join("")}</select></div></div>
-  <div class="price"><span>تكلفة الشحن: أول كجم مشمول، وكل كجم إضافي ٨ ج.م، ورسوم التحصيل ٢٪</span><b id="pr"></b></div>
+  ${can("cou")?`<div><label>المندوب</label><select id="cu"><option value="">إسناد لاحقًا</option>${D.c.map(k=>`<option value="${k.id}">${esc(k.n)}</option>`).join("")}</select></div>`:""}</div>
+  ${cm()?`<div class="price"><span>تكلفة الشحن: أول كجم مشمول، وكل كجم إضافي ٨ ج.م، ورسوم التحصيل ٢٪</span><b id="pr"></b></div>`:""}
   <button class="bt" onclick="add()">إنشاء الشحنة</button></div>`;
 }
 function calc(){const e=$("#pr");if(e)e.textContent=money(price(+$("#z").value,+$("#w").value,+$("#cd").value))}
-function add(){
+async function add(){
+  if(!can("neu"))return;
   const g=i=>$("#"+i).value.trim();
   if(!g("sn")||!g("rn")||!g("rp")||!g("ct")){toast("أكمل اسم المرسل والمستلم وهاتفه والعنوان");return}
-  const z=+g("z"),w=+g("w")||1,cod=+g("cd")||0,id="MS-"+(100000+D.n++);
-  D.s.push({id,sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,cod,fee:price(z,w,cod),cid:g("cu")?+g("cu"):null,st:"new",h:[{s:"new",t:Date.now()}]});
-  save();TR=id;toast("تم إنشاء الشحنة "+id);go("trk");
+  const z=+g("z"),w=+g("w")||1,cod=+g("cd")||0,cu=$("#cu");
+  try{
+    const n=await db.runTransaction(async t=>{const r=db.doc("meta/counter"),d=await t.get(r),v=(d.exists?d.data().n:100000)+1;t.set(r,{n:v});return v});
+    const id="MS-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id};
+    const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee:price(z,w,cod),cod});await b.commit();
+    toast("تم تسجيل الشحنة "+id);
+    if(can("trk")){TR=id;go("trk")}else{render();lbl(id,{...o,id,cod})}
+  }catch(e){fail(e)}
 }
 function trk(){
   const x=D.s.find(s=>s.id===TR.trim().toUpperCase());
   let out="";
   if(TR&&!x)out=`<div class="box">لم نجد شحنة بهذا الرقم. تأكد من الرقم (مثال: MS-100001).</div>`;
   if(x)out=`<div class="box"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><b style="font-size:18px">${x.id}</b>${badge(x.st)}</div>
-  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${num(x.w)} كجم${x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
+  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${num(x.w)} كجم${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
   <ul class="tl">${[...x.h].reverse().map(e=>`<li><i style="background:${stn(e.s)[2]}"></i><b>${stn(e.s)[1]}</b><div class="mu">${fdt(e.t)}</div></li>`).join("")}</ul>
   <button class="bt s" onclick="lbl('${x.id}')">طباعة البوليصة</button></div>`;
   return`<h2>تتبع شحنة</h2><div class="bar"><input id="tn" placeholder="أدخل رقم الشحنة، مثال MS-100001" value="${esc(TR)}" onkeydown="if(event.key==='Enter'){TR=this.value;render()}"><button class="bt" style="flex:0 0 auto" onclick="TR=$('#tn').value;render()">بحث</button></div>${out}`;
@@ -181,11 +184,12 @@ function cou(){
   <div class="cg">${D.c.map(k=>{const S=D.s.filter(x=>x.cid==k.id);return`<div class="st"><b>${esc(k.n)}</b><small>${esc(k.p)} · ${esc(k.a)}</small><small>${num(S.filter(x=>!["done","ret"].includes(x.st)).length)} نشطة · ${num(S.filter(x=>x.st==="done").length)} مُسلَّمة</small></div>`}).join("")}</div>`;
 }
 function addC(){
+  if(!can("cou"))return;
   const n=$("#kn").value.trim();if(!n){toast("اكتب اسم المندوب");return}
-  D.c.push({id:Date.now(),n,p:$("#kp").value.trim(),a:$("#ka").value.trim()});save();toast("تمت إضافة المندوب");render();
+  db.collection("couriers").add({n,p:$("#kp").value.trim(),a:$("#ka").value.trim()}).then(()=>{toast("تمت إضافة المندوب");$("#kn").value=""},fail);
 }
-function lbl(id){
-  const x=D.s.find(s=>s.id===id);let px=0,bars="";
+function lbl(id,o){
+  const x=o||D.s.find(s=>s.id===id);let px=0,bars="";
   for(const ch of x.id){const w=1+ch.charCodeAt(0)%3;bars+=`<rect x="${px}" y="0" width="${w}" height="60"/>`;px+=w+1+ch.charCodeAt(0)%2}
   $("#lblbody").innerHTML=`<h3><span>مسار للشحن</span><span>${x.id}</span></h3><svg viewBox="0 0 ${px} 60" preserveAspectRatio="none" fill="#000">${bars}</svg><hr>
   <div><b>إلى:</b> ${esc(x.rn)} — ${esc(x.rp)}</div><div>${esc(x.city)} (${ZN[x.z][0]})</div><hr>
@@ -193,7 +197,106 @@ function lbl(id){
   <div class="cod">${x.cod?"تحصيل: "+money(x.cod):"مدفوعة مسبقًا"}</div>`;
   $("#lbl").classList.add("on");
 }
-render();
+
+let ME=null;
+const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
+const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
+const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou",...(ME.money?["fin"]:[])]:["neu"];
+const can=v=>tabs().includes(v);
+const cm=()=>!!ME&&(ME.role==="owner"||(ME.role==="admin"&&!!ME.money));
+const isO=()=>!!ME&&ME.role==="owner";
+function soft(){
+  const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
+  const f=document.activeElement&&document.activeElement.id;render();
+  for(const k in v){const e=document.getElementById(k);if(e){if(e.type==="checkbox")e.checked=v[k];else e.value=v[k]}}
+  if(f){const e=document.getElementById(f);if(e)e.focus()}
+}
+function merge(){D.s=RS.map(x=>({fee:0,cod:0,h:[{t:0}],...x,...(FN[x.id]||{})}));D.s.sort((a,b)=>a.h[0].t-b.h[0].t);soft()}
+function init(){
+  if(!FB.apiKey){render();return}
+  firebase.initializeApp(FB);db=firebase.firestore();auth=firebase.auth();auth.onAuthStateChanged(onAuth);
+}
+async function onAuth(u){
+  if(BOOT)return;
+  unsubs.forEach(f=>f());unsubs=[];ME=null;D.s=[];D.c=[];D.u=[];RS=[];FN={};
+  try{
+    if(!u){SETUP=(await db.doc("meta/setup").get()).exists;READY=true;return render()}
+    const p=await db.doc("users/"+u.uid).get();
+    if(!p.exists||!p.data().active){await auth.signOut();toast("هذا الحساب غير مفعّل. تواصل مع المالك");return}
+    ME={id:u.uid,...p.data()};V=tabs()[0];READY=true;
+    const sub=(q,fn)=>unsubs.push(q.onSnapshot(fn,e=>console.error(e)));
+    if(ME.role!=="emp"){
+      sub(db.collection("shipments"),s=>{RS=s.docs.map(d=>({id:d.id,...d.data()}));merge()});
+      sub(db.collection("couriers"),s=>{D.c=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
+    }
+    if(cm())sub(db.collection("finance"),s=>{FN={};s.docs.forEach(d=>FN[d.id]=d.data());merge()});
+    if(isO())sub(db.collection("users"),s=>{D.u=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
+    render();
+  }catch(e){console.error(e);READY=true;render();toast("تعذّر الاتصال بـ Firebase")}
+}
+const cfg=()=>`<div class="box lg" style="max-width:560px"><h2>إعداد Firebase</h2><p>ضع إعدادات مشروعك في الثابت <b>FB</b> أعلى الكود. ثم فعّل Authentication (Email/Password) وأنشئ قاعدة Firestore، وانسخ قواعد الأمان من الملف <b>firestore.rules</b>.</p></div>`;
+const wait=()=>`<p class="mu">جارٍ التحميل…</p>`;
+function setup(){return`<div class="box lg"><h2>إنشاء حساب المالك</h2><p class="mu">هذا أول تشغيل. حساب المالك يملك كل الصلاحيات، وهو الوحيد الذي يضيف الحسابات ويحدد من يرى الأموال.</p><label>الاسم</label><input id="an"><label>اسم المستخدم (حروف إنجليزية وأرقام)</label><input id="au" autocomplete="username"><label>كلمة السر (٦ أحرف على الأقل)</label><input id="ap" type="password" autocomplete="new-password"><button class="bt" onclick="doSetup()">إنشاء الحساب</button></div>`}
+async function doSetup(){
+  const n=$("#an").value.trim(),u=$("#au").value.trim(),p=$("#ap").value;
+  if(!n||!/^[a-z0-9._-]+$/i.test(u)||p.length<6){toast("أكمل الاسم، واسم مستخدم بالإنجليزية، وكلمة سر من ٦ أحرف");return}
+  BOOT=true;
+  try{
+    const c=await auth.createUserWithEmailAndPassword(mail(u),p),b=db.batch();
+    b.set(db.doc("users/"+c.user.uid),{name:n,username:u.toLowerCase(),role:"owner",money:true,active:true});
+    b.set(db.doc("meta/setup"),{done:true});await b.commit();
+    BOOT=false;await onAuth(c.user);
+  }catch(e){BOOT=false;toast("تعذّر إنشاء الحساب: "+(e.code||""))}
+}
+function login(){return`<div class="box lg"><h2>تسجيل الدخول</h2><label>اسم المستخدم</label><input id="lu" autocomplete="username"><label>كلمة السر</label><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="bt" onclick="doLogin()">دخول</button></div>`}
+function doLogin(){
+  const u=$("#lu").value.trim();
+  auth.signInWithEmailAndPassword(mail(u),$("#lp").value).catch(()=>toast("اسم المستخدم أو كلمة السر غير صحيحة"));
+}
+function myPw(){
+  const p=prompt("كلمة السر الجديدة (٦ أحرف على الأقل)");if(!p)return;
+  if(p.length<6){toast("٦ أحرف على الأقل");return}
+  auth.currentUser.updatePassword(p).then(()=>toast("تم تغيير كلمة السر"),()=>toast("سجّل الخروج وادخل من جديد ثم أعد المحاولة"));
+}
+function fin(){
+  const S=[...D.s].reverse(),tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
+  const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${badge(x.st)}</td><td><input type="number" min="0" id="c${x.id}" value="${x.cod}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td><td><input type="number" min="0" id="f${x.id}" value="${x.fee}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td></tr>`).join("")||`<tr><td colspan="4" class="mu">لا توجد فواتير بعد.</td></tr>`;
+  return`<h2>الحسابات</h2><div class="stats"><div class="st"><small>إجمالي الشحن</small><b>${money(tf)}</b></div><div class="st"><small>إجمالي التحصيل</small><b>${money(tc)}</b></div></div>
+  <div class="box tw"><table><tr><th>الفاتورة</th><th>الحالة</th><th>التحصيل (ج.م)</th><th>سعر الشحن (ج.م)</th></tr>${tr}</table></div><p class="mu">عدّل أي رقم وسيُحفظ تلقائيًا.</p>`;
+}
+function setFin(id){
+  if(!cm())return;
+  db.doc("finance/"+id).set({fee:+$("#f"+id).value||0,cod:+$("#c"+id).value||0}).then(()=>toast("تم حفظ السعر"),fail);
+}
+function usr(){
+  const tr=D.u.map(k=>{const me=k.id===ME.id;
+    const role=me?`<span class="bd" style="color:var(--pr)">${ROLE[k.role]}</span>`:`<select aria-label="الدور" onchange="uRole('${k.id}',this.value)"><option value="admin"${k.role==="admin"?" selected":""}>أدمن</option><option value="emp"${k.role==="emp"?" selected":""}>موظف</option></select>`;
+    const mo=k.role==="owner"?"دائمًا":k.role==="admin"?`<label style="margin:0;color:var(--tx)"><input type="checkbox" style="width:auto" ${k.money?"checked":""} onchange="uMoney('${k.id}',this.checked)"> يرى الأموال</label>`:"لا";
+    const act=me?"":`<button class="bt s" onclick="uActive('${k.id}',${!k.active})">${k.active?"تعطيل الحساب":"تفعيل الحساب"}</button>`;
+    return`<tr><td><b>${esc(k.name)}</b><div class="mu">${esc(k.username)}${k.active?"":" · معطّل"}</div></td><td>${role}</td><td>${mo}</td><td>${act}</td></tr>`}).join("");
+  return`<h2>المستخدمون والصلاحيات</h2>
+  <div class="box"><div class="fg"><div><label>الاسم</label><input id="nn"></div><div><label>اسم المستخدم (إنجليزي)</label><input id="nu"></div><div><label>كلمة السر</label><input id="np" type="password" autocomplete="new-password"></div>
+  <div><label>الدور</label><select id="nr"><option value="emp">موظف: تسجيل شحنات جديدة فقط</option><option value="admin">أدمن: يعدّل على النظام</option></select></div></div>
+  <label style="margin-top:10px;color:var(--tx)"><input id="nm" type="checkbox" style="width:auto"> السماح للأدمن برؤية الأموال والحسابات</label>
+  <div style="margin-top:12px"><button class="bt" onclick="addU()">إضافة مستخدم</button></div></div>
+  <div class="box tw"><table><tr><th>المستخدم</th><th>الدور</th><th>رؤية الأموال</th><th></th></tr>${tr}</table></div>`;
+}
+async function addU(){
+  if(!isO())return;
+  const n=$("#nn").value.trim(),u=$("#nu").value.trim().toLowerCase(),p=$("#np").value,r=$("#nr").value,m=$("#nm").checked;
+  if(!n||!/^[a-z0-9._-]+$/.test(u)||p.length<6){toast("أكمل الاسم، واسم مستخدم بالإنجليزية، وكلمة سر من ٦ أحرف");return}
+  try{
+    const a2=firebase.apps.find(a=>a.name==="aux")||firebase.initializeApp(FB,"aux");
+    const c=await a2.auth().createUserWithEmailAndPassword(mail(u),p);
+    await db.doc("users/"+c.user.uid).set({name:n,username:u,role:r,money:r==="admin"&&m,active:true});
+    await a2.auth().signOut();toast("تمت إضافة المستخدم");
+    ["nn","nu","np"].forEach(i=>$("#"+i).value="");
+  }catch(e){toast(e.code==="auth/email-already-in-use"?"اسم المستخدم مستخدم بالفعل":"تعذّر إنشاء الحساب")}
+}
+function uRole(id,r){if(isO())db.doc("users/"+id).update(r==="admin"?{role:r}:{role:r,money:false}).catch(fail)}
+function uMoney(id,v){if(isO())db.doc("users/"+id).update({money:v}).then(()=>toast(v?"تم السماح للأدمن برؤية الأموال":"تم منع الأدمن من رؤية الأموال"),fail)}
+function uActive(id,v){if(isO()&&id!==ME.id)db.doc("users/"+id).update({active:v}).then(()=>toast(v?"تم تفعيل الحساب":"تم تعطيل الحساب"),fail)}
+init();
 </script>
 </body>
 </html>
