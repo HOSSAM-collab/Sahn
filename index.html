@@ -112,7 +112,7 @@ const go=v=>{V=v;render();scrollTo(0,0)};
 function render(){
   if(!FB.apiKey||FB.apiKey==="YOUR_API_KEY")V="cfg";
   else if(!READY)V="wait";
-  else if(!ME)V=SETUP?"login":"setup"; // هنا بيحدد لو محتاج Setup ولا Login
+  else if(!ME)V=SETUP?"login":"setup"; 
   else if(!can(V))V=tabs()[0];
   const on=!!ME;
   $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
@@ -211,7 +211,7 @@ const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
 const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
 const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou"]:["neu"];
 const can=v=>tabs().includes(v);
-const cm=()=>!!ME&&(ME.role==="owner");
+const cm=()=>!!ME&&(ME.role==="owner"); 
 const isO=()=>!!ME&&ME.role==="owner";
 function soft(){
   const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
