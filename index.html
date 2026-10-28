@@ -112,7 +112,7 @@ const go=v=>{V=v;render();scrollTo(0,0)};
 function render(){
   if(!FB.apiKey||FB.apiKey==="YOUR_API_KEY")V="cfg";
   else if(!READY)V="wait";
-  else if(!ME)V="login";
+  else if(!ME)V=SETUP?"login":"setup"; // هنا بيحدد لو محتاج Setup ولا Login
   else if(!can(V))V=tabs()[0];
   const on=!!ME;
   $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
@@ -211,7 +211,7 @@ const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
 const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
 const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou"]:["neu"];
 const can=v=>tabs().includes(v);
-const cm=()=>!!ME&&(ME.role==="owner"); 
+const cm=()=>!!ME&&(ME.role==="owner");
 const isO=()=>!!ME&&ME.role==="owner";
 function soft(){
   const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
@@ -244,8 +244,19 @@ async function onAuth(u){
 }
 const cfg=()=>`<div class="box lg" style="max-width:560px"><h2>إعداد Firebase</h2><p>ضع إعدادات مشروعك في الثابت <b>FB</b> أعلى الكود. ثم فعّل Authentication (Email/Password) وأنشئ قاعدة Firestore، وانسخ قواعد الأمان من الملف <b>firestore.rules</b>.</p></div>`;
 const wait=()=>`<p class="mu">جارٍ التحميل…</p>`;
-const setup=()=>"";
-async function doSetup(){}
+
+function setup(){return`<div class="box lg"><h2>إنشاء حساب المالك (حسام)</h2><p class="mu">هذا أول تشغيل للمنصة. سيتم إنشاء حسابك كمالك للمنصة بكل الصلاحيات.</p><label>الاسم</label><input id="an" value="حسام الشويخ"><label>اسم المستخدم (إنجليزي)</label><input id="au" value="hossam" autocomplete="username"><label>كلمة السر</label><input id="ap" type="password" value="972004" autocomplete="new-password"><button class="bt" onclick="doSetup()">إنشاء الحساب</button></div>`}
+async function doSetup(){
+  const n=$("#an").value.trim(),u=$("#au").value.trim(),p=$("#ap").value;
+  if(!n||!/^[a-z0-9._-]+$/i.test(u)||p.length<6){toast("أكمل الاسم، واسم مستخدم بالإنجليزية، وكلمة سر من ٦ أحرف");return}
+  BOOT=true;
+  try{
+    const c=await auth.createUserWithEmailAndPassword(mail(u),p),b=db.batch();
+    b.set(db.doc("users/"+c.user.uid),{name:n,username:u.toLowerCase(),role:"owner",money:true,active:true});
+    b.set(db.doc("meta/setup"),{done:true});await b.commit();
+    BOOT=false;await onAuth(c.user);
+  }catch(e){BOOT=false;toast("تعذّر إنشاء الحساب: "+(e.code||""))}
+}
 
 function login(){return`<div class="box lg"><h2>تسجيل الدخول</h2><label>اسم المستخدم</label><input id="lu" autocomplete="username"><label>كلمة السر</label><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="bt" onclick="doLogin()">دخول</button></div>`}
 
