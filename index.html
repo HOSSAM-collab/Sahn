@@ -83,7 +83,9 @@ footer{text-align:center;padding:20px;font-size:13px;color:var(--mu);border-top:
 <div id="lbl"><div><div class="label" id="lblbody"></div><div class="la"><button class="bt" onclick="window.print()">طباعة البوليصة</button><button class="bt s" onclick="$('#lbl').classList.remove('on')">إغلاق</button></div></div></div>
 <script>
 const ST=[["new","تم الإنشاء","#6b7c85"],["picked","تم الاستلام من المرسل","#2a6fb0"],["hub","في مركز الفرز","#8a5cc2"],["out","خرج للتسليم","#c98a00"],["done","تم التسليم","#1c8a4e"],["ret","مرتجع","#b3382c"]];
-const ZN=[["القاهرة والجيزة",40],["الإسكندرية والدلتا",55],["القناة وسيناء",70],["الصعيد",75]];
+const ZN=[
+  ["القاهرة",40],["الجيزة",40],["الإسكندرية",50],["القليوبية",45],["الشرقية",50],["الدقهلية",55],["الغربية",55],["المنوفية",55],["البحيرة",60],["كفر الشيخ",60],["دمياط",60],["بورسعيد",65],["الإسماعيلية",65],["السويس",65],["شمال سيناء",80],["جنوب سيناء",80],["الفيوم",65],["بني سويف",65],["المنيا",70],["أسيوط",75],["سوهاج",75],["قنا",80],["الأقصر",80],["أسوان",85],["البحر الأحمر",85],["الوادي الجديد",90],["مطروح",90]
+];
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const stn=k=>ST.find(x=>x[0]===k);
@@ -209,9 +211,9 @@ function lbl(id,o){
 let ME=null;
 const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
 const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
-const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou"]:["neu"];
+const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou","fin"]:["neu"];
 const can=v=>tabs().includes(v);
-const cm=()=>!!ME&&(ME.role==="owner"); 
+const cm=()=>!!ME&&(ME.role==="owner" || ME.role==="admin"); 
 const isO=()=>!!ME&&ME.role==="owner";
 function soft(){
   const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
@@ -242,7 +244,7 @@ async function onAuth(u){
     render();
   }catch(e){console.error(e);READY=true;render();toast("تعذّر الاتصال بـ Firebase")}
 }
-const cfg=()=>`<div class="box lg" style="max-width:560px"><h2>إعداد Firebase</h2><p>ضع إعدادات مشروعك في الثابت <b>FB</b> أعلى الكود. ثم فعّل Authentication (Email/Password) وأنشئ قاعدة Firestore، وانسخ قواعد الأمان من الملف <b>firestore.rules</b>.</p></div>`;
+const cfg=()=>`<div class="box lg" style="max-width:560px"><h2>إعداد Firebase</h2><p>ضع إعدادات مشروعك في الثابت <b>FB</b> أعلى الكود.</p></div>`;
 const wait=()=>`<p class="mu">جارٍ التحميل…</p>`;
 
 function setup(){return`<div class="box lg"><h2>إنشاء حساب المالك (حسام)</h2><p class="mu">هذا أول تشغيل للمنصة. سيتم إنشاء حسابك كمالك للمنصة بكل الصلاحيات.</p><label>الاسم</label><input id="an" value="حسام الشويخ"><label>اسم المستخدم (إنجليزي)</label><input id="au" value="hossam" autocomplete="username"><label>كلمة السر</label><input id="ap" type="password" value="972004" autocomplete="new-password"><button class="bt" onclick="doSetup()">إنشاء الحساب</button></div>`}
@@ -272,9 +274,15 @@ function myPw(){
 }
 
 function fin(){
-  const S=[...D.s].reverse(),tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
+  const S=[...D.s].reverse();
+  const tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
+  const net = tc - tf; // صافي الربح (التحصيل - تكلفة الشحن)
   const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${badge(x.st)}</td><td><input type="number" min="0" id="c${x.id}" value="${x.cod}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px" ${isO()?"":"disabled"}></td><td><input type="number" min="0" id="f${x.id}" value="${x.fee}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px" ${isO()?"":"disabled"}></td></tr>`).join("")||`<tr><td colspan="4" class="mu">لا توجد فواتير بعد.</td></tr>`;
-  return`<h2>الحسابات</h2><div class="stats"><div class="st"><small>إجمالي الشحن</small><b>${money(tf)}</b></div><div class="st"><small>إجمالي التحصيل</small><b>${money(tc)}</b></div></div>
+  return`<h2>الحسابات</h2><div class="stats">
+  <div class="st"><small>إجمالي الشحن (التكلفة)</small><b>${money(tf)}</b></div>
+  <div class="st"><small>إجمالي التحصيل (المبلغ)</small><b>${money(tc)}</b></div>
+  <div class="st"><small>صافي الربح</small><b style="color:${net>=0?'var(--pr)':'var(--dn)'}">${money(net)}</b></div>
+  </div>
   <div class="box tw"><table><tr><th>الفاتورة</th><th>الحالة</th><th>التحصيل (ج.م)</th><th>سعر الشحن (ج.م)</th></tr>${tr}</table></div><p class="mu">${isO()?"عدّل أي رقم وسيُحفظ تلقائيًا.":"للمالك فقط صلاحية تعديل الأرقام."}</p>`;
 }
 function setFin(id){
@@ -284,13 +292,15 @@ function setFin(id){
 function usr(){
   const tr=D.u.map(k=>{const me=k.id===ME.id;
     const role=me?`<span class="bd" style="color:var(--pr)">${ROLE[k.role]}</span>`:`<select aria-label="الدور" onchange="uRole('${k.id}',this.value)"><option value="admin"${k.role==="admin"?" selected":""}>أدمن</option><option value="emp"${k.role==="emp"?" selected":""}>موظف</option></select>`;
-    const act=me?"":`<button class="bt s" onclick="uActive('${k.id}',${!k.active})">${k.active?"تعطيل الحساب":"تفعيل الحساب"}</button>`;
-    return`<tr><td><b>${esc(k.name)}</b><div class="mu">${esc(k.username)}${k.active?"":" · معطّل"}</div></td><td>${role}</td><td>${act}</td></tr>`}).join("");
+    const act=me?"":`<button class="bt s" onclick="uActive('${k.id}',${!k.active})">${k.active?"تعطيل":"تفعيل"}</button>`;
+    const del=me?"":`<button class="bt s" style="color:var(--dn)" onclick="uDelete('${k.id}')">حذف</button>`;
+    const pass=me?"":`<button class="bt s" onclick="uPw('${k.id}')">تغيير الباسورد</button>`;
+    return`<tr><td><b>${esc(k.name)}</b><div class="mu">${esc(k.username)}${k.active?"":" · معطّل"}</div></td><td>${role}</td><td>${pass} ${act} ${del}</td></tr>`}).join("");
   return`<h2>المستخدمون والصلاحيات</h2>
   <div class="box"><div class="fg"><div><label>الاسم</label><input id="nn"></div><div><label>اسم المستخدم (إنجليزي)</label><input id="nu"></div><div><label>كلمة السر</label><input id="np" type="password" autocomplete="new-password"></div>
   <div><label>الدور</label><select id="nr"><option value="emp">موظف</option><option value="admin">أدمن</option></select></div></div>
   <div style="margin-top:12px"><button class="bt" onclick="addU()">إضافة مستخدم</button></div></div>
-  <div class="box tw"><table><tr><th>المستخدم</th><th>الدور</th><th></th></tr>${tr}</table></div>`;
+  <div class="box tw"><table><tr><th>المستخدم</th><th>الدور</th><th>إجراءات</th></tr>${tr}</table></div>`;
 }
 async function addU(){
   if(!isO())return;
@@ -306,6 +316,8 @@ async function addU(){
 }
 function uRole(id,r){if(isO())db.doc("users/"+id).update(r==="admin"?{role:r}:{role:r,money:false}).catch(fail)}
 function uActive(id,v){if(isO()&&id!==ME.id)db.doc("users/"+id).update({active:v}).then(()=>toast(v?"تم تفعيل الحساب":"تم تعطيل الحساب"),fail)}
+function uDelete(id){if(isO()&&id!==ME.id&&confirm("هل أنت متأكد من حذف هذا المستخدم نهائياً؟"))db.doc("users/"+id).delete().then(()=>toast("تم حذف المستخدم"),fail)}
+function uPw(id){if(isO()){const p=prompt("كلمة السر الجديدة (٦ أحرف على الأقل)");if(p&&p.length>=6)toast("لتغيير باسورد شخص آخر، يرجى استخدام لوحة تحكم Firebase مؤقتاً");}}
 init();
 </script>
 </body>
