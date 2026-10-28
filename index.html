@@ -151,9 +151,48 @@ function list(){
 function keep(){const p=$("#q").selectionStart;render();const e=$("#q");e.focus();e.setSelectionRange(p,p)}
 const FV=()=>firebase.firestore.FieldValue;
 const fail=e=>{console.error(e);toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال")};
-function setSt(id,s){if(!can("list"))return;db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>toast("تم تحديث الحالة"),fail)}
+function setSt(id,s){
+  if(!can("list"))return;
+  const x=D.s.find(o=>o.id===id); if(!x)return;
+  const oldSt=x.st;
+  db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>{
+    toast("تم تحديث الحالة");
+    // تحديث المخزن بناءً على الحالة
+    if(oldSt!==s){
+      let inv={...D.inv};
+      let shipped=+(inv.shipped||0), sold=+(inv.sold||0), total=+(inv.total||0);
+      let qty=+(x.qty||1);
+      
+      // لو خرج من الشحن (تم التسليم) -> ينزل من الشحن ويزيد في المبيعات
+      if(["hub","out","picked"].includes(oldSt) && ["done"].includes(s)){
+        shipped = Math.max(0, shipped - qty);
+        sold = sold + qty;
+      }
+      // لو رجع (مرتجع) -> ينزل من الشحن ويرجع المخزن
+      if(["hub","out","picked"].includes(oldSt) && ["ret"].includes(s)){
+        shipped = Math.max(0, shipped - qty);
+      }
+      // لو رجع للمخزن تاني (من التسليم) -> يقلل من المبيعات
+      if(["done"].includes(oldSt) && !["done","ret"].includes(s)){
+        sold = Math.max(0, sold - qty);
+      }
+      
+      db.doc("inventory/main").set({shipped:shipped, sold:sold, total:total},{merge:true});
+    }
+  },fail);
+}
 function setCou(id,c){if(!can("list"))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
-function delS(id){if(isO()&&confirm("هل أنت متأكد من حذف هذه الشحنة نهائياً؟")){db.doc("shipments/"+id).delete();db.doc("finance/"+id).delete().then(()=>toast("تم حذف الشحنة"),fail)}}
+function delS(id){if(isO()&&confirm("هل أنت متأكد من حذف هذه الشحنة نهائياً؟")){
+  const x=D.s.find(o=>o.id===id);
+  db.doc("shipments/"+id).delete();
+  db.doc("finance/"+id).delete().then(()=>{
+    if(x && ["hub","out","picked"].includes(x.st)){
+      let inv={...D.inv};
+      db.doc("inventory/main").set({shipped: Math.max(0,+(inv.shipped||0) - +(x.qty||1))},{merge:true});
+    }
+    toast("تم حذف الشحنة");
+  },fail);
+}}
 
 function neu(){
   return`<h2>شحنة جديدة</h2><div class="box"><div class="fg">
@@ -161,7 +200,8 @@ function neu(){
   <div><label>اسم المستلم</label><input id="rn"></div><div><label>هاتف المستلم</label><input id="rp" inputmode="tel"></div>
   <div><label>منطقة التوصيل</label><select id="z" onchange="calc()">${ZN.map((z,i)=>`<option value="${i}">${z[0]}</option>`).join("")}</select></div>
   <div><label>العنوان بالتفصيل</label><input id="ct"></div>
-  <div><label>الوزن (كجم)</label><input id="w" type="number" min="0.1" step="0.1" value="1" oninput="calc()"></div>
+  <div><label>المنتج / المحتوى</label><input id="w" placeholder="اكتب أي حاجة" oninput="calc()"></div>
+  <div><label>عدد العلب</label><input id="qty" type="number" min="1" value="1"></div>
   <div><label>المبلغ المطلوب تحصيله (ج.م)</label><input id="cd" type="number" min="0" value="0" oninput="calc()"></div>
   ${can("cou")?`<div><label>المندوب</label><select id="cu"><option value="">إسناد لاحقًا</option>${D.c.map(k=>`<option value="${k.id}">${esc(k.n)}</option>`).join("")}</select></div>`:""}</div>
   ${cm()?`<div class="price"><span>تكلفة الشحن: أول كجم مشمول، وكل كجم إضافي ٨ ج.م، ورسوم التحصيل ٢٪</span><b id="pr"></b></div>`:""}
@@ -174,7 +214,8 @@ function edit(id){
   <div><label>اسم المرسل</label><input id="esn" value="${esc(x.sn)}"></div><div><label>هاتف المرسل</label><input id="esp" value="${esc(x.sp)}"></div>
   <div><label>اسم المستلم</label><input id="ern" value="${esc(x.rn)}"></div><div><label>هاتف المستلم</label><input id="erp" value="${esc(x.rp)}"></div>
   <div><label>العنوان</label><input id="ect" value="${esc(x.city)}"></div>
-  <div><label>الوزن</label><input id="ew" value="${esc(x.w)}"></div>
+  <div><label>المنتج / المحتوى</label><input id="ew" value="${esc(x.w)}"></div>
+  <div><label>عدد العلب</label><input id="eqty" type="number" value="${esc(x.qty||1)}"></div>
   <div><label>التحصيل (ج.م)</label><input id="ecd" value="${esc(x.cod)}"></div>
   <div><label>سعر الشحن (ج.م)</label><input id="efee" value="${esc(x.fee)}"></div>
   </div>
@@ -184,7 +225,7 @@ function edit(id){
 function saveEdit(id){
   if(!isO())return;
   const g=i=>$("#"+i).value.trim();
-  const o={sn:g("esn"),sp:g("esp"),rn:g("ern"),rp:g("erp"),city:g("ect"),w:g("ew"),cod:+g("ecd")||0};
+  const o={sn:g("esn"),sp:g("esp"),rn:g("ern"),rp:g("erp"),city:g("ect"),w:g("ew"),qty:+g("eqty")||1,cod:+g("ecd")||0};
   db.doc("shipments/"+id).update(o).then(()=>{
     db.doc("finance/"+id).set({fee:+g("efee")||0,cod:+g("ecd")||0},{merge:true}).then(()=>{
       toast("تم حفظ التعديلات بنجاح");go("list");
@@ -192,12 +233,35 @@ function saveEdit(id){
   },fail);
 }
 
+function calc(){
+  const e=$("#pr");
+  if(e) e.textContent=money(price(+$("#z").value, 1, +$("#cd").value));
+}
+
+async function add(){
+  if(!can("neu"))return;
+  const g=i=>$("#"+i).value.trim();
+  if(!g("sn")||!g("rn")||!g("rp")||!g("ct")){toast("أكمل اسم المرسل والمستلم وهاتفه والعنوان");return}
+  const z=+g("z"),w=g("w"),cod=+g("cd")||0,cu=$("#cu"),qty=+$("#qty").value||1;
+  try{
+    const n=await db.runTransaction(async t=>{const r=db.doc("meta/counter"),d=await t.get(r),v=(d.exists?d.data().n:100000)+1;t.set(r,{n:v});return v});
+    const id="KH-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,qty,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id};
+    const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee:price(z,1,cod),cod});await b.commit();
+    
+    // تحديث المخزن: يخصم من المتاح ويزيد في الشحن
+    let inv={...D.inv};
+    db.doc("inventory/main").set({shipped: +(inv.shipped||0) + qty},{merge:true});
+
+    toast("تم تسجيل الشحنة "+id);
+    if(can("trk")){TR=id;go("trk")}else{render();lbl(id,{...o,id,cod})}
+  }catch(e){fail(e)}
+}
 function trk(){
   const x=D.s.find(s=>s.id===TR.trim().toUpperCase());
   let out="";
   if(TR&&!x)out=`<div class="box">لم نجد شحنة بهذا الرقم. تأكد من الرقم (مثال: KH-100001).</div>`;
   if(x)out=`<div class="box"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><b style="font-size:18px">${x.id}</b>${badge(x.st)}</div>
-  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${esc(x.w)} كجم${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
+  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${esc(x.w)} · ${num(x.qty||1)} عبوة${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
   <ul class="tl">${[...x.h].reverse().map(e=>`<li><i style="background:${stn(e.s)[2]}"></i><b>${stn(e.s)[1]}</b><div class="mu">${fdt(e.t)}</div></li>`).join("")}</ul>
   <button class="bt s" onclick="lbl('${x.id}')">طباعة البوليصة</button></div>`;
   return`<h2>تتبع شحنة</h2><div class="bar"><input id="tn" placeholder="أدخل رقم الشحنة، مثال KH-100001" value="${esc(TR)}" onkeydown="if(event.key==='Enter'){TR=this.value;render()}"><button class="bt" style="flex:0 0 auto" onclick="TR=$('#tn').value;render()">بحث</button></div>${out}`;
@@ -216,7 +280,7 @@ function lbl(id,o){
   for(const ch of x.id){const w=1+ch.charCodeAt(0)%3;bars+=`<rect x="${px}" y="0" width="${w}" height="60"/>`;px+=w+1+ch.charCodeAt(0)%2}
   $("#lblbody").innerHTML=`<h3><span>الخير للشحن</span><span>${x.id}</span></h3><svg viewBox="0 0 ${px} 60" preserveAspectRatio="none" fill="#000">${bars}</svg><hr>
   <div><b>إلى:</b> ${esc(x.rn)} — ${esc(x.rp)}</div><div>${esc(x.city)} (${ZN[x.z][0]})</div><hr>
-  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>الوزن: ${esc(x.w)} كجم</div>
+  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>المحتوى: ${esc(x.w)} · ${num(x.qty||1)} عبوة</div>
   <div class="cod">${x.cod?"تحصيل: "+money(x.cod):"مدفوعة مسبقًا"}</div>`;
   $("#lbl").classList.add("on");
 }
