@@ -11,9 +11,9 @@
 :root[data-theme="dark"]{--bg:#0e171b;--sf:#16232a;--tx:#e8eef0;--mu:#8fa3ab;--ln:#27373f;--pr:#3fb8b0;--pr2:#14302f;--dn:#ef7a6e}
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:env(safe-area-inset-top,0px)}
-body{margin:0;background:var(--bg);color:var(--tx);font:400 15px/1.6 "IBM Plex Sans Arabic",Tahoma,sans-serif}
+body{margin:0;background:var(--bg);color:var(--tx);font:400 15px/1.6 "IBM Plex Sans Arabic",Tahoma,sans-serif;display:flex;flex-direction:column;min-height:100vh}
 header{background:var(--sf);border-bottom:1px solid var(--ln);position:sticky;top:env(safe-area-inset-top,0px);z-index:5}
-.in{max-width:1080px;margin:0 auto;padding:0 16px}
+.in{max-width:1080px;margin:0 auto;padding:0 16px;width:100%}
 .brand{display:flex;align-items:baseline;gap:10px;padding-top:12px}
 .brand h1{margin:0;font-size:26px;font-weight:700;color:var(--pr);letter-spacing:0}
 .brand span{color:var(--mu);font-size:13px}
@@ -21,7 +21,7 @@ nav{display:flex;gap:4px;overflow-x:auto;padding:8px 0 0}
 nav button{font:inherit;font-weight:500;background:none;border:0;border-bottom:3px solid transparent;color:var(--mu);padding:8px 14px;cursor:pointer;white-space:nowrap}
 nav button.on{color:var(--tx);border-bottom-color:var(--ac)}
 nav button:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--pr);outline-offset:2px}
-main{padding:20px 16px 48px}
+main{padding:20px 16px;flex:1}
 h2{margin:0 0 14px;font-size:20px}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:18px}
 .st{background:var(--sf);border:1px solid var(--ln);border-radius:8px;padding:12px 14px}
@@ -65,6 +65,7 @@ html[data-theme="dark"] .bt,.bt.s{background:var(--pr2);color:var(--pr)}
 .label .cod{font-size:22px;font-weight:700;border:2px solid #000;padding:2px 10px;text-align:center;margin-top:8px}
 .la{display:flex;gap:8px;justify-content:center;margin-top:10px}
 .lg{max-width:380px;margin:40px auto}.lg input{margin-bottom:12px}.lg .bt{width:100%}#who{margin-inline-start:auto;display:flex;gap:8px;align-items:center;font-size:14px}
+footer{text-align:center;padding:20px;font-size:13px;color:var(--mu);border-top:1px solid var(--ln);background:var(--sf);margin-top:auto}
 @media print{body>*:not(#lbl){display:none!important}#lbl{position:static;background:none;display:block}.la{display:none}.label{max-width:none;border-width:2px}}
 @media(prefers-reduced-motion:reduce){#toast{transition:none}}
 </style>
@@ -77,6 +78,7 @@ html[data-theme="dark"] .bt,.bt.s{background:var(--pr2);color:var(--pr)}
 <div class="brand"><h1>الخير</h1><span>إدارة شركة الشحن</span><div id="who"></div></div>
 <nav id="nav"></nav></div></header>
 <main class="in" id="app"></main>
+<footer>تصميم وتطوير: حسام الشويخ</footer>
 <div id="toast"></div>
 <div id="lbl"><div><div class="label" id="lblbody"></div><div class="la"><button class="bt" onclick="window.print()">طباعة البوليصة</button><button class="bt s" onclick="$('#lbl').classList.remove('on')">إغلاق</button></div></div></div>
 <script>
@@ -209,7 +211,7 @@ const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
 const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
 const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou"]:["neu"];
 const can=v=>tabs().includes(v);
-const cm=()=>!!ME&&(ME.role==="owner"); // المالك فقط يرى الأموال
+const cm=()=>!!ME&&(ME.role==="owner"); 
 const isO=()=>!!ME&&ME.role==="owner";
 function soft(){
   const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
@@ -245,7 +247,7 @@ const wait=()=>`<p class="mu">جارٍ التحميل…</p>`;
 const setup=()=>"";
 async function doSetup(){}
 
-function login(){return`<div class="box lg"><h2>تسجيل الدخول</h2><p class="mu">حساب المالك: <b>HOSSAM</b> | الباسورد: <b>972004</b></p><label>اسم المستخدم</label><input id="lu" value="HOSSAM" autocomplete="username"><label>كلمة السر</label><input id="lp" type="password" value="972004" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="bt" onclick="doLogin()">دخول</button></div>`}
+function login(){return`<div class="box lg"><h2>تسجيل الدخول</h2><label>اسم المستخدم</label><input id="lu" autocomplete="username"><label>كلمة السر</label><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="bt" onclick="doLogin()">دخول</button></div>`}
 
 function doLogin(){
   const u=$("#lu").value.trim();
