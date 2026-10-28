@@ -1,9 +1,9 @@
-<!DOCTYPE html>
+l<!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>مسار للشحن</title>
+<title>الخير للشحن</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 :root{--bg:#f2f5f6;--sf:#fff;--tx:#13232b;--mu:#5d6f77;--ln:#d9e0e3;--pr:#0b6e6e;--pr2:#e0f0ef;--ac:#f2b705;--dn:#b3382c;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
@@ -91,8 +91,15 @@ const num=n=>Number(n||0).toLocaleString("ar-EG");
 const money=n=>num(n)+" ج.م";
 const fdt=t=>new Date(t).toLocaleString("ar-EG",{dateStyle:"medium",timeStyle:"short"});
 const price=(z,w,cod)=>ZN[z][1]+Math.max(0,Math.ceil(w||1)-1)*8+Math.round((cod||0)*0.02);
-// ضع إعدادات مشروع Firebase هنا (Project settings > Your apps > Web)
-const FB={apiKey:"",authDomain:"",projectId:"",appId:""};
+
+// ⚠️ ضع إعدادات مشروع Firebase هنا (Project settings > Your apps > Web)
+const FB={
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+  projectId: "YOUR_PROJECT_ID",
+  appId: "YOUR_APP_ID"
+};
+
 const D={u:[],c:[],s:[]};
 let RS=[],FN={},db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
 const mail=u=>u.toLowerCase()+"@masar.app";
@@ -100,7 +107,7 @@ let V="dash",Q="",F="",TR="";
 const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
 const go=v=>{V=v;render();scrollTo(0,0)};
 function render(){
-  if(!FB.apiKey)V="cfg";
+  if(!FB.apiKey||FB.apiKey==="YOUR_API_KEY")V="cfg";
   else if(!READY)V="wait";
   else if(!ME)V=SETUP?"login":"setup";
   else if(!can(V))V=tabs()[0];
@@ -140,7 +147,7 @@ function list(){
 }
 function keep(){const p=$("#q").selectionStart;render();const e=$("#q");e.focus();e.setSelectionRange(p,p)}
 const FV=()=>firebase.firestore.FieldValue;
-const fail=e=>toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال");
+const fail=e=>{console.error(e);toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال")};
 function setSt(id,s){if(!can("list"))return;db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>toast("تم تحديث الحالة"),fail)}
 function setCou(id,c){if(!can("list"))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
 function neu(){
@@ -213,7 +220,7 @@ function soft(){
 }
 function merge(){D.s=RS.map(x=>({fee:0,cod:0,h:[{t:0}],...x,...(FN[x.id]||{})}));D.s.sort((a,b)=>a.h[0].t-b.h[0].t);soft()}
 function init(){
-  if(!FB.apiKey){render();return}
+  if(!FB.apiKey||FB.apiKey==="YOUR_API_KEY"){render();return}
   firebase.initializeApp(FB);db=firebase.firestore();auth=firebase.auth();auth.onAuthStateChanged(onAuth);
 }
 async function onAuth(u){
@@ -222,81 +229,5 @@ async function onAuth(u){
   try{
     if(!u){SETUP=(await db.doc("meta/setup").get()).exists;READY=true;return render()}
     const p=await db.doc("users/"+u.uid).get();
-    if(!p.exists||!p.data().active){await auth.signOut();toast("هذا الحساب غير مفعّل. تواصل مع المالك");return}
-    ME={id:u.uid,...p.data()};V=tabs()[0];READY=true;
-    const sub=(q,fn)=>unsubs.push(q.onSnapshot(fn,e=>console.error(e)));
-    if(ME.role!=="emp"){
-      sub(db.collection("shipments"),s=>{RS=s.docs.map(d=>({id:d.id,...d.data()}));merge()});
-      sub(db.collection("couriers"),s=>{D.c=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
-    }
-    if(cm())sub(db.collection("finance"),s=>{FN={};s.docs.forEach(d=>FN[d.id]=d.data());merge()});
-    if(isO())sub(db.collection("users"),s=>{D.u=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
-    render();
-  }catch(e){console.error(e);READY=true;render();toast("تعذّر الاتصال بـ Firebase")}
-}
-const cfg=()=>`<div class="box lg" style="max-width:560px"><h2>إعداد Firebase</h2><p>ضع إعدادات مشروعك في الثابت <b>FB</b> أعلى الكود. ثم فعّل Authentication (Email/Password) وأنشئ قاعدة Firestore، وانسخ قواعد الأمان من الملف <b>firestore.rules</b>.</p></div>`;
-const wait=()=>`<p class="mu">جارٍ التحميل…</p>`;
-function setup(){return`<div class="box lg"><h2>إنشاء حساب المالك</h2><p class="mu">هذا أول تشغيل. حساب المالك يملك كل الصلاحيات، وهو الوحيد الذي يضيف الحسابات ويحدد من يرى الأموال.</p><label>الاسم</label><input id="an"><label>اسم المستخدم (حروف إنجليزية وأرقام)</label><input id="au" autocomplete="username"><label>كلمة السر (٦ أحرف على الأقل)</label><input id="ap" type="password" autocomplete="new-password"><button class="bt" onclick="doSetup()">إنشاء الحساب</button></div>`}
-async function doSetup(){
-  const n=$("#an").value.trim(),u=$("#au").value.trim(),p=$("#ap").value;
-  if(!n||!/^[a-z0-9._-]+$/i.test(u)||p.length<6){toast("أكمل الاسم، واسم مستخدم بالإنجليزية، وكلمة سر من ٦ أحرف");return}
-  BOOT=true;
-  try{
-    const c=await auth.createUserWithEmailAndPassword(mail(u),p),b=db.batch();
-    b.set(db.doc("users/"+c.user.uid),{name:n,username:u.toLowerCase(),role:"owner",money:true,active:true});
-    b.set(db.doc("meta/setup"),{done:true});await b.commit();
-    BOOT=false;await onAuth(c.user);
-  }catch(e){BOOT=false;toast("تعذّر إنشاء الحساب: "+(e.code||""))}
-}
-function login(){return`<div class="box lg"><h2>تسجيل الدخول</h2><label>اسم المستخدم</label><input id="lu" autocomplete="username"><label>كلمة السر</label><input id="lp" type="password" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"><button class="bt" onclick="doLogin()">دخول</button></div>`}
-function doLogin(){
-  const u=$("#lu").value.trim();
-  auth.signInWithEmailAndPassword(mail(u),$("#lp").value).catch(()=>toast("اسم المستخدم أو كلمة السر غير صحيحة"));
-}
-function myPw(){
-  const p=prompt("كلمة السر الجديدة (٦ أحرف على الأقل)");if(!p)return;
-  if(p.length<6){toast("٦ أحرف على الأقل");return}
-  auth.currentUser.updatePassword(p).then(()=>toast("تم تغيير كلمة السر"),()=>toast("سجّل الخروج وادخل من جديد ثم أعد المحاولة"));
-}
-function fin(){
-  const S=[...D.s].reverse(),tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
-  const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${badge(x.st)}</td><td><input type="number" min="0" id="c${x.id}" value="${x.cod}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td><td><input type="number" min="0" id="f${x.id}" value="${x.fee}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td></tr>`).join("")||`<tr><td colspan="4" class="mu">لا توجد فواتير بعد.</td></tr>`;
-  return`<h2>الحسابات</h2><div class="stats"><div class="st"><small>إجمالي الشحن</small><b>${money(tf)}</b></div><div class="st"><small>إجمالي التحصيل</small><b>${money(tc)}</b></div></div>
-  <div class="box tw"><table><tr><th>الفاتورة</th><th>الحالة</th><th>التحصيل (ج.م)</th><th>سعر الشحن (ج.م)</th></tr>${tr}</table></div><p class="mu">عدّل أي رقم وسيُحفظ تلقائيًا.</p>`;
-}
-function setFin(id){
-  if(!cm())return;
-  db.doc("finance/"+id).set({fee:+$("#f"+id).value||0,cod:+$("#c"+id).value||0}).then(()=>toast("تم حفظ السعر"),fail);
-}
-function usr(){
-  const tr=D.u.map(k=>{const me=k.id===ME.id;
-    const role=me?`<span class="bd" style="color:var(--pr)">${ROLE[k.role]}</span>`:`<select aria-label="الدور" onchange="uRole('${k.id}',this.value)"><option value="admin"${k.role==="admin"?" selected":""}>أدمن</option><option value="emp"${k.role==="emp"?" selected":""}>موظف</option></select>`;
-    const mo=k.role==="owner"?"دائمًا":k.role==="admin"?`<label style="margin:0;color:var(--tx)"><input type="checkbox" style="width:auto" ${k.money?"checked":""} onchange="uMoney('${k.id}',this.checked)"> يرى الأموال</label>`:"لا";
-    const act=me?"":`<button class="bt s" onclick="uActive('${k.id}',${!k.active})">${k.active?"تعطيل الحساب":"تفعيل الحساب"}</button>`;
-    return`<tr><td><b>${esc(k.name)}</b><div class="mu">${esc(k.username)}${k.active?"":" · معطّل"}</div></td><td>${role}</td><td>${mo}</td><td>${act}</td></tr>`}).join("");
-  return`<h2>المستخدمون والصلاحيات</h2>
-  <div class="box"><div class="fg"><div><label>الاسم</label><input id="nn"></div><div><label>اسم المستخدم (إنجليزي)</label><input id="nu"></div><div><label>كلمة السر</label><input id="np" type="password" autocomplete="new-password"></div>
-  <div><label>الدور</label><select id="nr"><option value="emp">موظف: تسجيل شحنات جديدة فقط</option><option value="admin">أدمن: يعدّل على النظام</option></select></div></div>
-  <label style="margin-top:10px;color:var(--tx)"><input id="nm" type="checkbox" style="width:auto"> السماح للأدمن برؤية الأموال والحسابات</label>
-  <div style="margin-top:12px"><button class="bt" onclick="addU()">إضافة مستخدم</button></div></div>
-  <div class="box tw"><table><tr><th>المستخدم</th><th>الدور</th><th>رؤية الأموال</th><th></th></tr>${tr}</table></div>`;
-}
-async function addU(){
-  if(!isO())return;
-  const n=$("#nn").value.trim(),u=$("#nu").value.trim().toLowerCase(),p=$("#np").value,r=$("#nr").value,m=$("#nm").checked;
-  if(!n||!/^[a-z0-9._-]+$/.test(u)||p.length<6){toast("أكمل الاسم، واسم مستخدم بالإنجليزية، وكلمة سر من ٦ أحرف");return}
-  try{
-    const a2=firebase.apps.find(a=>a.name==="aux")||firebase.initializeApp(FB,"aux");
-    const c=await a2.auth().createUserWithEmailAndPassword(mail(u),p);
-    await db.doc("users/"+c.user.uid).set({name:n,username:u,role:r,money:r==="admin"&&m,active:true});
-    await a2.auth().signOut();toast("تمت إضافة المستخدم");
-    ["nn","nu","np"].forEach(i=>$("#"+i).value="");
-  }catch(e){toast(e.code==="auth/email-already-in-use"?"اسم المستخدم مستخدم بالفعل":"تعذّر إنشاء الحساب")}
-}
-function uRole(id,r){if(isO())db.doc("users/"+id).update(r==="admin"?{role:r}:{role:r,money:false}).catch(fail)}
-function uMoney(id,v){if(isO())db.doc("users/"+id).update({money:v}).then(()=>toast(v?"تم السماح للأدمن برؤية الأموال":"تم منع الأدمن من رؤية الأموال"),fail)}
-function uActive(id,v){if(isO()&&id!==ME.id)db.doc("users/"+id).update({active:v}).then(()=>toast(v?"تم تفعيل الحساب":"تم تعطيل الحساب"),fail)}
-init();
-</script>
-</body>
-</html>
+    if(!p.exists||!p.data().active){await auth.signOut();toast("هذا الحساب غير مف
+                                                      
