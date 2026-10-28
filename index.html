@@ -83,7 +83,7 @@ footer{text-align:center;padding:20px;font-size:13px;color:var(--mu);border-top:
 <div id="lbl"><div><div class="label" id="lblbody"></div><div class="la"><button class="bt" onclick="window.print()">طباعة البوليصة</button><button class="bt s" onclick="$('#lbl').classList.remove('on')">إغلاق</button></div></div></div>
 <script>
 const ST=[["new","تم الإنشاء","#6b7c85"],["picked","تم الاستلام من المرسل","#2a6fb0"],["hub","في مركز الفرز","#8a5cc2"],["out","خرج للتسليم","#c98a00"],["done","تم التسليم","#1c8a4e"],["ret","مرتجع","#b3382c"]];
-const ZN=[
+let ZN=[
   ["القاهرة",40],["الجيزة",40],["الإسكندرية",50],["القليوبية",45],["الشرقية",50],["الدقهلية",55],["الغربية",55],["المنوفية",55],["البحيرة",60],["كفر الشيخ",60],["دمياط",60],["بورسعيد",65],["الإسماعيلية",65],["السويس",65],["شمال سيناء",80],["جنوب سيناء",80],["الفيوم",65],["بني سويف",65],["المنيا",70],["أسيوط",75],["سوهاج",75],["قنا",80],["الأقصر",80],["أسوان",85],["البحر الأحمر",85],["الوادي الجديد",90],["مطروح",90]
 ];
 const $=s=>document.querySelector(s);
@@ -105,7 +105,7 @@ const FB={
   measurementId: "G-C24CETX6QB"
 };
 
-const D={u:[],c:[],s:[],inv:{}};
+const D={u:[],c:[],s:[],inv:{},prices:{}};
 let RS=[],FN={},db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
 const mail=u=>u.toLowerCase()+"@khair.app";
 let V="dash",Q="",F="",TR="";
@@ -119,7 +119,7 @@ function render(){
   const on=!!ME;
   $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
   $("#who").innerHTML=on?`${esc(ME.name)} <span class="bd" style="color:var(--pr)">${ROLE[ME.role]}</span> <button class="bt s" onclick="myPw()">كلمة السر</button> <button class="bt s" onclick="auth.signOut()">خروج</button>`:"";
-  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr,inv})[V]();
+  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr,inv,prc})[V]();
   if(V==="neu")calc();
 }
 const cname=id=>(D.c.find(c=>c.id==id)||{n:"غير مُسند"}).n;
@@ -157,24 +157,21 @@ function setSt(id,s){
   const oldSt=x.st;
   db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>{
     toast("تم تحديث الحالة");
-    // تحديث المخزن بناءً على الحالة
     if(oldSt!==s){
       let inv={...D.inv};
       let shipped=+(inv.shipped||0), sold=+(inv.sold||0), total=+(inv.total||0);
       let qty=+(x.qty||1);
       
-      // لو خرج من الشحن (تم التسليم) -> ينزل من الشحن ويزيد في المبيعات
+      if(["hub","out","picked"].includes(oldSt) && ["ret"].includes(s)){
+        shipped = Math.max(0, shipped - qty);
+      }
       if(["hub","out","picked"].includes(oldSt) && ["done"].includes(s)){
         shipped = Math.max(0, shipped - qty);
         sold = sold + qty;
       }
-      // لو رجع (مرتجع) -> ينزل من الشحن ويرجع المخزن
-      if(["hub","out","picked"].includes(oldSt) && ["ret"].includes(s)){
-        shipped = Math.max(0, shipped - qty);
-      }
-      // لو رجع للمخزن تاني (من التسليم) -> يقلل من المبيعات
       if(["done"].includes(oldSt) && !["done","ret"].includes(s)){
         sold = Math.max(0, sold - qty);
+        shipped = shipped + qty;
       }
       
       db.doc("inventory/main").set({shipped:shipped, sold:sold, total:total},{merge:true});
@@ -248,7 +245,6 @@ async function add(){
     const id="KH-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,qty,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id};
     const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee:price(z,1,cod),cod});await b.commit();
     
-    // تحديث المخزن: يخصم من المتاح ويزيد في الشحن
     let inv={...D.inv};
     db.doc("inventory/main").set({shipped: +(inv.shipped||0) + qty},{merge:true});
 
@@ -287,8 +283,8 @@ function lbl(id,o){
 
 let ME=null;
 const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
-const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون",inv:"المخزن"};
-const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr","inv"]:ME.role==="admin"?["dash","list","neu","trk","cou","fin","inv"]:["neu"];
+const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون",inv:"المخزن",prc:"أسعار الشحن"};
+const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr","inv","prc"]:ME.role==="admin"?["dash","list","neu","trk","cou","fin","inv"]:["neu"];
 const can=v=>tabs().includes(v);
 const cm=()=>!!ME&&(ME.role==="owner" || ME.role==="admin"); 
 const isO=()=>!!ME&&ME.role==="owner";
@@ -319,6 +315,7 @@ async function onAuth(u){
     if(cm())sub(db.collection("finance"),s=>{FN={};s.docs.forEach(d=>FN[d.id]=d.data());merge()});
     if(isO())sub(db.collection("users"),s=>{D.u=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
     if(ME.role!=="emp")sub(db.doc("inventory/main"),s=>{if(s.exists)D.inv=s.data();render()});
+    if(isO())sub(db.doc("settings/prices"),s=>{if(s.exists&&s.data().ZN)ZN=s.data().ZN; render()});
     render();
   }catch(e){console.error(e);READY=true;render();toast("تعذّر الاتصال بـ Firebase")}
 }
@@ -428,6 +425,16 @@ function saveInv(){
     sold: +$("#i_sold").value||0,
     price: +$("#i_price").value||0
   }).then(()=>toast("تم حفظ بيانات المخزن"),fail);
+}
+
+function prc(){
+  return`<h2>تعديل أسعار الشحن</h2><div class="box"><p class="mu">عدل سعر الشحن لكل محافظة، التغييرات هتتحفظ فوراً.</p>
+  <div class="fg">${ZN.map((z,i)=>`<div><label>${z[0]}</label><input type="number" id="pz_${i}" value="${z[1]}" onchange="savePrice(${i})"></div>`).join("")}</div></div>`;
+}
+function savePrice(i){
+  if(!isO())return;
+  ZN[i][1] = +$("#pz_"+i).value || 0;
+  db.doc("settings/prices").set({ZN},{merge:true}).then(()=>toast("تم حفظ سعر "+ZN[i][0]),fail);
 }
 init();
 </script>
