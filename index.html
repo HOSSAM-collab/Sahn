@@ -105,7 +105,7 @@ const FB={
   measurementId: "G-C24CETX6QB"
 };
 
-const D={u:[],c:[],s:[]};
+const D={u:[],c:[],s:[],inv:{}};
 let RS=[],FN={},db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
 const mail=u=>u.toLowerCase()+"@khair.app";
 let V="dash",Q="",F="",TR="";
@@ -119,7 +119,7 @@ function render(){
   const on=!!ME;
   $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
   $("#who").innerHTML=on?`${esc(ME.name)} <span class="bd" style="color:var(--pr)">${ROLE[ME.role]}</span> <button class="bt s" onclick="myPw()">كلمة السر</button> <button class="bt s" onclick="auth.signOut()">خروج</button>`:"";
-  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr})[V]();
+  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr,inv})[V]();
   if(V==="neu")calc();
 }
 const cname=id=>(D.c.find(c=>c.id==id)||{n:"غير مُسند"}).n;
@@ -144,7 +144,7 @@ function list(){
   const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)} · ${esc(x.rp)}</div></td>
   <td><select aria-label="الحالة" onchange="setSt('${x.id}',this.value)">${ST.map(s=>`<option value="${s[0]}"${s[0]===x.st?" selected":""}>${s[1]}</option>`).join("")}</select></td>
   <td><select aria-label="المندوب" onchange="setCou('${x.id}',this.value)"><option value="">غير مُسند</option>${D.c.map(k=>`<option value="${k.id}"${k.id==x.cid?" selected":""}>${esc(k.n)}</option>`).join("")}</select></td>
-  ${cm()?`<td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td>`:""}<td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button></td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
+  ${cm()?`<td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td>`:""}<td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button>${isO()?` <button class="bt s" onclick="edit('${x.id}')">تعديل</button> <button class="bt s" style="color:var(--dn)" onclick="delS('${x.id}')">حذف</button>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
   return`<h2>الشحنات (${num(S.length)})</h2><div class="bar"><input id="q" placeholder="ابحث بالرقم أو الاسم أو الهاتف أو المدينة" value="${esc(Q)}" oninput="Q=this.value;keep()"><select onchange="F=this.value;render()"><option value="">كل الحالات</option>${ST.map(s=>`<option value="${s[0]}"${s[0]===F?" selected":""}>${s[1]}</option>`).join("")}</select></div>
   <div class="box tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th>${cm()?"<th>التحصيل</th>":""}<th></th></tr>${tr}</table></div>`;
 }
@@ -153,6 +153,8 @@ const FV=()=>firebase.firestore.FieldValue;
 const fail=e=>{console.error(e);toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال")};
 function setSt(id,s){if(!can("list"))return;db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>toast("تم تحديث الحالة"),fail)}
 function setCou(id,c){if(!can("list"))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
+function delS(id){if(isO()&&confirm("هل أنت متأكد من حذف هذه الشحنة نهائياً؟")){db.doc("shipments/"+id).delete();db.doc("finance/"+id).delete().then(()=>toast("تم حذف الشحنة"),fail)}}
+
 function neu(){
   return`<h2>شحنة جديدة</h2><div class="box"><div class="fg">
   <div><label>اسم المرسل</label><input id="sn"></div><div><label>هاتف المرسل</label><input id="sp" inputmode="tel"></div>
@@ -165,26 +167,37 @@ function neu(){
   ${cm()?`<div class="price"><span>تكلفة الشحن: أول كجم مشمول، وكل كجم إضافي ٨ ج.م، ورسوم التحصيل ٢٪</span><b id="pr"></b></div>`:""}
   <button class="bt" onclick="add()">إنشاء الشحنة</button></div>`;
 }
-function calc(){const e=$("#pr");if(e)e.textContent=money(price(+$("#z").value,+$("#w").value,+$("#cd").value))}
-async function add(){
-  if(!can("neu"))return;
-  const g=i=>$("#"+i).value.trim();
-  if(!g("sn")||!g("rn")||!g("rp")||!g("ct")){toast("أكمل اسم المرسل والمستلم وهاتفه والعنوان");return}
-  const z=+g("z"),w=+g("w")||1,cod=+g("cd")||0,cu=$("#cu");
-  try{
-    const n=await db.runTransaction(async t=>{const r=db.doc("meta/counter"),d=await t.get(r),v=(d.exists?d.data().n:100000)+1;t.set(r,{n:v});return v});
-    const id="KH-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id};
-    const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee:price(z,w,cod),cod});await b.commit();
-    toast("تم تسجيل الشحنة "+id);
-    if(can("trk")){TR=id;go("trk")}else{render();lbl(id,{...o,id,cod})}
-  }catch(e){fail(e)}
+function edit(id){
+  const x=D.s.find(s=>s.id===id);
+  if(!x)return;
+  return`<h2>تعديل شحنة ${id}</h2><div class="box"><div class="fg">
+  <div><label>اسم المرسل</label><input id="esn" value="${esc(x.sn)}"></div><div><label>هاتف المرسل</label><input id="esp" value="${esc(x.sp)}"></div>
+  <div><label>اسم المستلم</label><input id="ern" value="${esc(x.rn)}"></div><div><label>هاتف المستلم</label><input id="erp" value="${esc(x.rp)}"></div>
+  <div><label>العنوان</label><input id="ect" value="${esc(x.city)}"></div>
+  <div><label>الوزن</label><input id="ew" value="${esc(x.w)}"></div>
+  <div><label>التحصيل (ج.م)</label><input id="ecd" value="${esc(x.cod)}"></div>
+  <div><label>سعر الشحن (ج.م)</label><input id="efee" value="${esc(x.fee)}"></div>
+  </div>
+  <button class="bt" style="margin-top:15px" onclick="saveEdit('${id}')">حفظ التعديلات</button>
+  <button class="bt s" style="margin-top:15px" onclick="go('list')">إلغاء</button></div>`;
 }
+function saveEdit(id){
+  if(!isO())return;
+  const g=i=>$("#"+i).value.trim();
+  const o={sn:g("esn"),sp:g("esp"),rn:g("ern"),rp:g("erp"),city:g("ect"),w:g("ew"),cod:+g("ecd")||0};
+  db.doc("shipments/"+id).update(o).then(()=>{
+    db.doc("finance/"+id).set({fee:+g("efee")||0,cod:+g("ecd")||0},{merge:true}).then(()=>{
+      toast("تم حفظ التعديلات بنجاح");go("list");
+    });
+  },fail);
+}
+
 function trk(){
   const x=D.s.find(s=>s.id===TR.trim().toUpperCase());
   let out="";
   if(TR&&!x)out=`<div class="box">لم نجد شحنة بهذا الرقم. تأكد من الرقم (مثال: KH-100001).</div>`;
   if(x)out=`<div class="box"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><b style="font-size:18px">${x.id}</b>${badge(x.st)}</div>
-  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${num(x.w)} كجم${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
+  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${esc(x.w)} كجم${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
   <ul class="tl">${[...x.h].reverse().map(e=>`<li><i style="background:${stn(e.s)[2]}"></i><b>${stn(e.s)[1]}</b><div class="mu">${fdt(e.t)}</div></li>`).join("")}</ul>
   <button class="bt s" onclick="lbl('${x.id}')">طباعة البوليصة</button></div>`;
   return`<h2>تتبع شحنة</h2><div class="bar"><input id="tn" placeholder="أدخل رقم الشحنة، مثال KH-100001" value="${esc(TR)}" onkeydown="if(event.key==='Enter'){TR=this.value;render()}"><button class="bt" style="flex:0 0 auto" onclick="TR=$('#tn').value;render()">بحث</button></div>${out}`;
@@ -203,15 +216,15 @@ function lbl(id,o){
   for(const ch of x.id){const w=1+ch.charCodeAt(0)%3;bars+=`<rect x="${px}" y="0" width="${w}" height="60"/>`;px+=w+1+ch.charCodeAt(0)%2}
   $("#lblbody").innerHTML=`<h3><span>الخير للشحن</span><span>${x.id}</span></h3><svg viewBox="0 0 ${px} 60" preserveAspectRatio="none" fill="#000">${bars}</svg><hr>
   <div><b>إلى:</b> ${esc(x.rn)} — ${esc(x.rp)}</div><div>${esc(x.city)} (${ZN[x.z][0]})</div><hr>
-  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>الوزن: ${num(x.w)} كجم</div>
+  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>الوزن: ${esc(x.w)} كجم</div>
   <div class="cod">${x.cod?"تحصيل: "+money(x.cod):"مدفوعة مسبقًا"}</div>`;
   $("#lbl").classList.add("on");
 }
 
 let ME=null;
 const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
-const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
-const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou","fin"]:["neu"];
+const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون",inv:"المخزن"};
+const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr","inv"]:ME.role==="admin"?["dash","list","neu","trk","cou","fin","inv"]:["neu"];
 const can=v=>tabs().includes(v);
 const cm=()=>!!ME&&(ME.role==="owner" || ME.role==="admin"); 
 const isO=()=>!!ME&&ME.role==="owner";
@@ -241,6 +254,7 @@ async function onAuth(u){
     }
     if(cm())sub(db.collection("finance"),s=>{FN={};s.docs.forEach(d=>FN[d.id]=d.data());merge()});
     if(isO())sub(db.collection("users"),s=>{D.u=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
+    if(ME.role!=="emp")sub(db.doc("inventory/main"),s=>{if(s.exists)D.inv=s.data();render()});
     render();
   }catch(e){console.error(e);READY=true;render();toast("تعذّر الاتصال بـ Firebase")}
 }
@@ -276,7 +290,7 @@ function myPw(){
 function fin(){
   const S=[...D.s].reverse();
   const tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
-  const net = tc - tf; // صافي الربح (التحصيل - تكلفة الشحن)
+  const net = tc - tf;
   const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${badge(x.st)}</td><td><input type="number" min="0" id="c${x.id}" value="${x.cod}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px" ${isO()?"":"disabled"}></td><td><input type="number" min="0" id="f${x.id}" value="${x.fee}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px" ${isO()?"":"disabled"}></td></tr>`).join("")||`<tr><td colspan="4" class="mu">لا توجد فواتير بعد.</td></tr>`;
   return`<h2>الحسابات</h2><div class="stats">
   <div class="st"><small>إجمالي الشحن (التكلفة)</small><b>${money(tf)}</b></div>
@@ -318,6 +332,39 @@ function uRole(id,r){if(isO())db.doc("users/"+id).update(r==="admin"?{role:r}:{r
 function uActive(id,v){if(isO()&&id!==ME.id)db.doc("users/"+id).update({active:v}).then(()=>toast(v?"تم تفعيل الحساب":"تم تعطيل الحساب"),fail)}
 function uDelete(id){if(isO()&&id!==ME.id&&confirm("هل أنت متأكد من حذف هذا المستخدم نهائياً؟"))db.doc("users/"+id).delete().then(()=>toast("تم حذف المستخدم"),fail)}
 function uPw(id){if(isO()){const p=prompt("كلمة السر الجديدة (٦ أحرف على الأقل)");if(p&&p.length>=6)toast("لتغيير باسورد شخص آخر، يرجى استخدام لوحة تحكم Firebase مؤقتاً");}}
+
+function inv(){
+  const I=D.inv||{total:0,shipped:0,sold:0,price:0};
+  const avail = (I.total||0) - (I.shipped||0) - (I.sold||0);
+  const totalVal = (I.total||0) * (I.price||0);
+  return`<h2>المخزن</h2>
+  <div class="stats">
+    <div class="st"><small>إجمالي العبوات</small><b>${num(I.total)}</b></div>
+    <div class="st"><small>العبوات في الشحن</small><b>${num(I.shipped)}</b></div>
+    <div class="st"><small>العبوات المباعة</small><b>${num(I.sold)}</b></div>
+    <div class="st"><small>العبوات المتاحة (المخزن)</small><b style="color:var(--pr)">${num(avail)}</b></div>
+    <div class="st"><small>سعر تكلفة العبوة</small><b>${money(I.price)}</b></div>
+    <div class="st"><small>إجمالي قيمة المخزن</small><b>${money(totalVal)}</b></div>
+  </div>
+  ${isO()?`
+  <div class="box"><h3>تحديث بيانات المخزن</h3><div class="fg">
+    <div><label>إجمالي العبوات</label><input type="number" id="i_total" value="${I.total||0}"></div>
+    <div><label>العبوات في الشحن</label><input type="number" id="i_shipped" value="${I.shipped||0}"></div>
+    <div><label>العبوات المباعة</label><input type="number" id="i_sold" value="${I.sold||0}"></div>
+    <div><label>سعر تكلفة العبوة (ج.م)</label><input type="number" id="i_price" value="${I.price||0}"></div>
+  </div><button class="bt" style="margin-top:12px" onclick="saveInv()">حفظ بيانات المخزن</button></div>
+  `:`<p class="mu">للمالك فقط صلاحية تعديل بيانات المخزن.</p>`}
+  `;
+}
+function saveInv(){
+  if(!isO())return;
+  db.doc("inventory/main").set({
+    total: +$("#i_total").value||0,
+    shipped: +$("#i_shipped").value||0,
+    sold: +$("#i_sold").value||0,
+    price: +$("#i_price").value||0
+  }).then(()=>toast("تم حفظ بيانات المخزن"),fail);
+}
 init();
 </script>
 </body>
