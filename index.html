@@ -58,6 +58,7 @@ html[data-theme="dark"] .bt,.bt.s{background:var(--pr2);color:var(--pr)}
 #toast.on{opacity:1}
 #lbl{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}
 #lbl.on{display:flex}
+#ed{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:30;padding:16px}#ed.on{display:flex}#edb{background:var(--sf);border:1px solid var(--ln);border-radius:8px;padding:16px;width:100%;max-width:420px;max-height:90vh;overflow:auto}#edb input,#edb select{margin-bottom:10px}
 .label{background:#fff;color:#000;width:100%;max-width:380px;border:2px solid #000;padding:14px;font-size:14px}
 .label h3{margin:0 0 6px;display:flex;justify-content:space-between;font-size:18px}
 .label hr{border:0;border-top:2px solid #000;margin:8px 0}
@@ -78,10 +79,11 @@ html[data-theme="dark"] .bt,.bt.s{background:var(--pr2);color:var(--pr)}
 <nav id="nav"></nav></div></header>
 <main class="in" id="app"></main>
 <div id="toast"></div>
+<div id="ed"><div id="edb"></div></div>
 <div id="lbl"><div><div class="label" id="lblbody"></div><div class="la"><button class="bt" onclick="window.print()">طباعة البوليصة</button><button class="bt s" onclick="$('#lbl').classList.remove('on')">إغلاق</button></div></div></div>
 <script>
 const ST=[["new","تم الإنشاء","#6b7c85"],["picked","تم الاستلام من المرسل","#2a6fb0"],["hub","في مركز الفرز","#8a5cc2"],["out","خرج للتسليم","#c98a00"],["done","تم التسليم","#1c8a4e"],["ret","مرتجع","#b3382c"]];
-const ZN=[["القاهرة والجيزة",40],["الإسكندرية والدلتا",55],["القناة وسيناء",70],["الصعيد",75]];
+const GOV=["القاهرة","الجيزة","الإسكندرية","القليوبية","الشرقية","الدقهلية","البحيرة","المنوفية","الغربية","كفر الشيخ","دمياط","بورسعيد","الإسماعيلية","السويس","شمال سيناء","جنوب سيناء","الفيوم","بني سويف","المنيا","أسيوط","سوهاج","قنا","الأقصر","أسوان","البحر الأحمر","الوادي الجديد","مطروح"];
 const KEY="masar-v1";
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
@@ -90,11 +92,11 @@ const badge=k=>`<span class="bd" style="color:${stn(k)[2]}">${stn(k)[1]}</span>`
 const num=n=>Number(n||0).toLocaleString("ar-EG");
 const money=n=>num(n)+" ج.م";
 const fdt=t=>new Date(t).toLocaleString("ar-EG",{dateStyle:"medium",timeStyle:"short"});
-const price=(z,w,cod)=>ZN[z][1]+Math.max(0,Math.ceil(w||1)-1)*8+Math.round((cod||0)*0.02);
+const calcFee=(g,w)=>(RATES&&RATES.p&&RATES.p[g]!=null?+RATES.p[g]:0)+Math.max(0,Math.ceil(w||1)-1)*(RATES?+RATES.kg||0:0);
 // ضع إعدادات مشروع Firebase هنا (Project settings > Your apps > Web)
 const FB={apiKey:"",authDomain:"",projectId:"",appId:""};
-const D={u:[],c:[],s:[]};
-let RS=[],FN={},db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
+const D={u:[],c:[],s:[],p:[]};
+let RS=[],FN={},PD=[],PR={},RATES=null,DEL=null,db,auth,READY=false,SETUP=true,BOOT=false,unsubs=[];
 const mail=u=>u.toLowerCase()+"@masar.app";
 let V="dash",Q="",F="",TR="";
 const toast=m=>{const t=$("#toast");t.textContent=m;t.classList.add("on");setTimeout(()=>t.classList.remove("on"),1800)};
@@ -107,7 +109,7 @@ function render(){
   const on=!!ME;
   $("#nav").innerHTML=on?tabs().map(v=>`<button class="${v===V?"on":""}" onclick="go('${v}')">${TN[v]}</button>`).join(""):"";
   $("#who").innerHTML=on?`${esc(ME.name)} <span class="bd" style="color:var(--pr)">${ROLE[ME.role]}</span> <button class="bt s" onclick="myPw()">كلمة السر</button> <button class="bt s" onclick="auth.signOut()">خروج</button>`:"";
-  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,fin,usr})[V]();
+  $("#app").innerHTML=({cfg,wait,setup,login,dash,list,neu,trk,cou,prod,rates,fin,usr})[V]();
   if(V==="neu")calc();
 }
 const cname=id=>(D.c.find(c=>c.id==id)||{n:"غير مُسند"}).n;
@@ -123,7 +125,7 @@ function dash(){
   const leg=ST.map(s=>`<span><b style="background:${s[2]}"></b>${s[1]}: ${num(c(s[0]))}</span>`).join("");
   const load=D.c.map(k=>`<div class="st"><b style="font-size:16px">${esc(k.n)}</b><small>${num(S.filter(x=>x.cid==k.id&&x.st==="out").length)} شحنة خرجت للتسليم</small></div>`).join("");
   return`<h2>لوحة التحكم</h2>
-  <div class="stats"><div class="st"><small>إجمالي الشحنات</small><b>${num(S.length)}</b></div><div class="st"><small>قيد التنفيذ</small><b>${num(act)}</b></div><div class="st"><small>تم تسليمها</small><b>${num(c("done"))}</b></div>${cm()?`<div class="st"><small>إيراد الشحن</small><b>${money(fees)}</b></div><div class="st"><small>تحصيل عند الاستلام (مُسلَّم)</small><b>${money(cod)}</b></div>`:""}</div>
+  <div class="stats"><div class="st"><small>إجمالي الشحنات</small><b>${num(S.length)}</b></div><div class="st"><small>قيد التنفيذ</small><b>${num(act)}</b></div><div class="st"><small>تم تسليمها</small><b>${num(c("done"))}</b></div>${cm()?(()=>{const t=tot();return`<div class="st"><small>الأموال المحصلة</small><b>${money(t.col)}</b></div><div class="st"><small>صافي الربح</small><b>${money(t.col-t.fee-t.cost)}</b></div>`})():""}</div>
   <div class="box"><b>مراحل الشحنات الآن</b><div class="pipe">${bar}</div><div class="leg">${leg}</div></div>
   <div class="box"><b>حمل المناديب اليوم</b><div class="cg">${load}</div></div>
   <div class="box"><b>آخر الشحنات</b><div class="tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th>${cm()?"<th>التحصيل</th>":""}</tr>${rows([...S].reverse().slice(0,5))}</table></div></div>`;
@@ -131,55 +133,98 @@ function dash(){
 function list(){
   const q=Q.trim().toLowerCase();
   const S=[...D.s].reverse().filter(x=>(!F||x.st===F)&&(!q||[x.id,x.rn,x.rp,x.city,x.sn].join(" ").toLowerCase().includes(q)));
-  const tr=S.map(x=>`<tr><td><b>${x.id}</b>${x.hidden?` <span class="bd" style="color:var(--dn)">مخفية عن الأدمن</span>`:""}<div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)} · ${esc(x.rp)}</div></td>
-  <td><select aria-label="الحالة" onchange="setSt('${x.id}',this.value)">${ST.map(s=>`<option value="${s[0]}"${s[0]===x.st?" selected":""}>${s[1]}</option>`).join("")}</select></td>
-  <td><select aria-label="المندوب" onchange="setCou('${x.id}',this.value)"><option value="">غير مُسند</option>${D.c.map(k=>`<option value="${k.id}"${k.id==x.cid?" selected":""}>${esc(k.n)}</option>`).join("")}</select></td>
-  ${cm()?`<td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td>`:""}<td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button>${isO()?` <button class="bt s" onclick="setHide('${x.id}',${!x.hidden})">${x.hidden?"إظهار":"إخفاء"}</button>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
+  const tr=S.map(x=>`<tr><td><b>${x.id}</b>${x.hidden?` <span class="bd" style="color:var(--dn)">مخفية عن المدير</span>`:""}<div class="mu">${fdt(x.h[0].t)}</div></td><td>${esc(x.rn)}<div class="mu">${esc(x.city)} · ${esc(x.rp)}</div>${x.pn?`<div class="mu">${esc(x.pn)} × ${num(x.qty||1)}</div>`:""}</td>
+  <td><select aria-label="الحالة"${canEdit(x)?"":" disabled"} onchange="setSt('${x.id}',this.value)">${ST.map(s=>`<option value="${s[0]}"${s[0]===x.st?" selected":""}>${s[1]}</option>`).join("")}</select></td>
+  <td><select aria-label="المندوب"${canEdit(x)?"":" disabled"} onchange="setCou('${x.id}',this.value)"><option value="">غير مُسند</option>${D.c.map(k=>`<option value="${k.id}"${k.id==x.cid?" selected":""}>${esc(k.n)}</option>`).join("")}</select></td>
+  ${cm()?`<td>${x.cod?money(x.cod):"—"}<div class="mu">الشحن ${money(x.fee)}</div></td>`:""}<td><button class="bt s" onclick="lbl('${x.id}')">بوليصة</button> <button class="bt s" onclick="TR='${x.id}';go('trk')">تتبع</button>${canEdit(x)?` <button class="bt s" onclick="edit('${x.id}')">تعديل</button>`:""}${isO()?` <button class="bt s" onclick="setHide('${x.id}',${!x.hidden})">${x.hidden?"إظهار":"إخفاء"}</button> <button class="bt s" style="color:var(--dn)" onclick="delInv('${x.id}')">${DEL===x.id?"تأكيد الحذف":"حذف"}</button>`:""}</td></tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد شحنات مطابقة. جرّب تغيير البحث أو الفلتر.</td></tr>`;
   return`<h2>الشحنات (${num(S.length)})</h2><div class="bar"><input id="q" placeholder="ابحث بالرقم أو الاسم أو الهاتف أو المدينة" value="${esc(Q)}" oninput="Q=this.value;keep()"><select onchange="F=this.value;render()"><option value="">كل الحالات</option>${ST.map(s=>`<option value="${s[0]}"${s[0]===F?" selected":""}>${s[1]}</option>`).join("")}</select></div>
   <div class="box tw"><table><tr><th>الرقم</th><th>المستلم</th><th>الحالة</th><th>المندوب</th>${cm()?"<th>التحصيل</th>":""}<th></th></tr>${tr}</table></div>`;
 }
 function keep(){const p=$("#q").selectionStart;render();const e=$("#q");e.focus();e.setSelectionRange(p,p)}
 const FV=()=>firebase.firestore.FieldValue;
 const fail=e=>toast("تعذّر الحفظ. تأكد من الصلاحيات والاتصال");
-function setSt(id,s){if(!can("list"))return;db.doc("shipments/"+id).update({st:s,h:FV().arrayUnion({s,t:Date.now()})}).then(()=>toast("تم تحديث الحالة"),fail)}
-function setCou(id,c){if(!can("list"))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
+function setSt(id,s){
+  const x=D.s.find(z=>z.id===id);if(!x||!canEdit(x))return;
+  const b=db.batch(),q=x.qty||1,has=x.pid&&D.p.some(p=>p.id===x.pid);
+  b.update(db.doc("shipments/"+id),{st:s,h:FV().arrayUnion({s,t:Date.now()})});
+  if(has&&s==="ret"&&x.st!=="ret")b.update(db.doc("products/"+x.pid),{stock:FV().increment(q)});
+  if(has&&x.st==="ret"&&s!=="ret")b.update(db.doc("products/"+x.pid),{stock:FV().increment(-q)});
+  b.commit().then(()=>toast("تم تحديث الحالة"),fail);
+}
+function setCou(id,c){const x=D.s.find(z=>z.id===id);if(!x||!canEdit(x))return;db.doc("shipments/"+id).update({cid:c||null}).then(()=>toast("تم إسناد الشحنة"),fail)}
+const canEdit=x=>isO()||(!!ME&&ME.role==="admin"&&x.st!=="done");
+function edit(id){
+  const x=D.s.find(s=>s.id===id);if(!x||!canEdit(x))return;
+  $("#edb").innerHTML=`<h2>تعديل ${x.id}</h2><label>اسم المستلم</label><input id="e1" value="${esc(x.rn)}"><label>هاتف المستلم</label><input id="e2" value="${esc(x.rp)}"><label>العنوان</label><input id="e3" value="${esc(x.city)}"><label>المندوب</label><select id="e5"><option value="">غير مُسند</option>${D.c.map(k=>`<option value="${k.id}"${k.id==x.cid?" selected":""}>${esc(k.n)}</option>`).join("")}</select><div class="la"><button class="bt" onclick="saveEd('${x.id}')">حفظ</button><button class="bt s" onclick="$('#ed').classList.remove('on')">إلغاء</button></div>`;
+  $("#ed").classList.add("on");
+}
+function saveEd(id){
+  const x=D.s.find(s=>s.id===id);if(!x||!canEdit(x))return;
+  const rn=$("#e1").value.trim(),rp=$("#e2").value.trim(),city=$("#e3").value.trim();
+  if(!rn||!rp||!city){toast("الاسم والهاتف والعنوان مطلوبين");return}
+  db.doc("shipments/"+id).update({rn,rp,city,cid:$("#e5").value||null}).then(()=>{$("#ed").classList.remove("on");toast("تم حفظ التعديل")},fail);
+}
+function delInv(id){
+  if(!isO())return;
+  if(DEL!==id){DEL=id;render();return}
+  DEL=null;const x=D.s.find(z=>z.id===id),b=db.batch();
+  b.delete(db.doc("shipments/"+id));b.delete(db.doc("finance/"+id));
+  if(x&&x.pid&&!["done","ret"].includes(x.st)&&D.p.some(p=>p.id===x.pid))b.update(db.doc("products/"+x.pid),{stock:FV().increment(x.qty||1)});
+  b.commit().then(()=>toast("تم حذف الفاتورة نهائيًا"),fail);
+}
 function setHide(id,v){
   if(!isO())return;
   const b=db.batch();b.update(db.doc("shipments/"+id),{hidden:v});b.update(db.doc("finance/"+id),{hidden:v});
-  b.commit().then(()=>toast(v?"تم إخفاء الفاتورة عن الأدمن":"تم إظهار الفاتورة للأدمن"),fail);
+  b.commit().then(()=>toast(v?"تم إخفاء الفاتورة عن المدير":"تم إظهار الفاتورة للمدير"),fail);
 }
 function neu(){
-  return`<h2>شحنة جديدة</h2><div class="box"><div class="fg">
+  return`<h2>فاتورة جديدة</h2><div class="box"><div class="fg">
   <div><label>اسم المرسل</label><input id="sn"></div><div><label>هاتف المرسل</label><input id="sp" inputmode="tel"></div>
   <div><label>اسم المستلم</label><input id="rn"></div><div><label>هاتف المستلم</label><input id="rp" inputmode="tel"></div>
-  <div><label>منطقة التوصيل</label><select id="z" onchange="calc()">${ZN.map((z,i)=>`<option value="${i}">${z[0]}</option>`).join("")}</select></div>
+  <div><label>المحافظة</label><select id="z" onchange="calc()">${GOV.map(g=>`<option>${g}</option>`).join("")}</select></div>
   <div><label>العنوان بالتفصيل</label><input id="ct"></div>
+  <div><label>المنتج</label><select id="pd" onchange="pcalc()"><option value="">${D.p.length?"اختر المنتج":"لا توجد منتجات مسجلة"}</option>${D.p.map(p=>`<option value="${p.id}">${esc(p.name)} (${num(p.stock)} علبة)</option>`).join("")}</select></div>
+  <div><label>عدد العبوات</label><input id="qy" type="number" min="1" step="1" value="1" oninput="pcalc()"></div>
+  <div><label>مبلغ التحصيل (ج.م)</label><input id="cd" type="number" min="0" value="0" oninput="calc()"></div>
   <div><label>الوزن (كجم)</label><input id="w" type="number" min="0.1" step="0.1" value="1" oninput="calc()"></div>
-  <div><label>المبلغ المطلوب تحصيله (ج.م)</label><input id="cd" type="number" min="0" value="0" oninput="calc()"></div>
   ${can("cou")?`<div><label>المندوب</label><select id="cu"><option value="">إسناد لاحقًا</option>${D.c.map(k=>`<option value="${k.id}">${esc(k.n)}</option>`).join("")}</select></div>`:""}</div>
-  ${cm()?`<div class="price"><span>تكلفة الشحن: أول كجم مشمول، وكل كجم إضافي ٨ ج.م، ورسوم التحصيل ٢٪</span><b id="pr"></b></div>`:""}
-  <button class="bt" onclick="add()">إنشاء الشحنة</button></div>`;
+  ${can("rates")?`<div class="price"><span>الصافي المتوقع</span><b id="pr" style="font-size:16px"></b></div>`:""}
+  <button class="bt" onclick="add()">إنشاء الفاتورة</button></div>`;
 }
-function calc(){const e=$("#pr");if(e)e.textContent=money(price(+$("#z").value,+$("#w").value,+$("#cd").value))}
+function calc(){
+  const e=$("#pr");if(!e)return;
+  const g=$("#z").value,p=D.p.find(x=>x.id===$("#pd").value),q=+$("#qy").value||1,cod=+$("#cd").value||0;
+  const fee=RATES&&RATES.p&&RATES.p[g]!=null?calcFee(g,+$("#w").value):null,cost=p&&PR[p.id]?(+p.ws||0)*q:null;
+  e.textContent=fee==null?"سعر الشحن غير محدد":`شحن ${money(fee)} · جملة ${cost==null?"—":money(cost)} · صافي ${cost==null?"—":money(cod-fee-cost)}`;
+}
+function pcalc(){const p=D.p.find(x=>x.id===$("#pd").value);if(p&&can("rates")&&p.unit)$("#cd").value=p.unit*(+$("#qy").value||1);calc()}
 async function add(){
   if(!can("neu"))return;
   const g=i=>$("#"+i).value.trim();
+  const pid=g("pd"),qty=Math.max(1,Math.floor(+g("qy")||1)),p=D.p.find(x=>x.id===pid);
   if(!g("sn")||!g("rn")||!g("rp")||!g("ct")){toast("أكمل اسم المرسل والمستلم وهاتفه والعنوان");return}
-  const z=+g("z"),w=+g("w")||1,cod=+g("cd")||0,cu=$("#cu");
+  if(!p){toast("اختر المنتج");return}
+  const gv=g("z"),w=+g("w")||1,cod=+g("cd")||0,cu=$("#cu");
+  const fee=can("rates")&&RATES&&RATES.p&&RATES.p[gv]!=null?calcFee(gv,w):null;
+  const cost=can("rates")&&PR[pid]?(+PR[pid].ws||0)*qty:null;
   try{
-    const n=await db.runTransaction(async t=>{const r=db.doc("meta/counter"),d=await t.get(r),v=(d.exists?d.data().n:100000)+1;t.set(r,{n:v});return v});
-    const id="MS-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),z,w,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id,hidden:false};
-    const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee:price(z,w,cod),cod,hidden:false});await b.commit();
-    toast("تم تسجيل الشحنة "+id);
-    if(can("trk")){TR=id;go("trk")}else{render();lbl(id,{...o,id,cod})}
-  }catch(e){fail(e)}
+    const n=await db.runTransaction(async t=>{
+      const r=db.doc("meta/counter"),pr=db.doc("products/"+pid),[d,pd]=await Promise.all([t.get(r),t.get(pr)]);
+      if(!pd.exists||(pd.data().stock||0)<qty)throw new Error("stock");
+      const v=(d.exists?d.data().n:100000)+1;t.set(r,{n:v});t.update(pr,{stock:(pd.data().stock||0)-qty});return v;
+    });
+    const id="MS-"+n,o={sn:g("sn"),sp:g("sp"),rn:g("rn"),rp:g("rp"),city:g("ct"),gv,pid,pn:p.name,qty,w,cid:cu&&cu.value?cu.value:null,st:"new",h:[{s:"new",t:Date.now()}],by:ME.id,hidden:false};
+    const b=db.batch();b.set(db.doc("shipments/"+id),o);b.set(db.doc("finance/"+id),{fee,cost,cod,hidden:false});await b.commit();
+    toast("تم تسجيل الفاتورة "+id);
+    if(can("trk")){TR=id;go("trk")}else{render();$("#app").insertAdjacentHTML("afterbegin",`<div class="box">تم تسجيل الفاتورة <b>${id}</b></div>`)}
+  }catch(e){if(e.message==="stock")toast("الكمية غير كافية في المخزون");else fail(e)}
 }
 function trk(){
   const x=D.s.find(s=>s.id===TR.trim().toUpperCase());
   let out="";
   if(TR&&!x)out=`<div class="box">لم نجد شحنة بهذا الرقم. تأكد من الرقم (مثال: MS-100001).</div>`;
   if(x)out=`<div class="box"><div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px"><b style="font-size:18px">${x.id}</b>${badge(x.st)}</div>
-  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${ZN[x.z][0]} · ${num(x.w)} كجم${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
+  <p class="mu">من ${esc(x.sn)} إلى ${esc(x.rn)} · ${esc(x.city)} · ${esc(x.gv||"")} · ${num(x.w)} كجم${x.pn?" · المنتج: "+esc(x.pn)+" × "+num(x.qty||1):""}${cm()&&x.cod?" · تحصيل "+money(x.cod):""} · المندوب: ${esc(cname(x.cid))}</p>
   <ul class="tl">${[...x.h].reverse().map(e=>`<li><i style="background:${stn(e.s)[2]}"></i><b>${stn(e.s)[1]}</b><div class="mu">${fdt(e.t)}</div></li>`).join("")}</ul>
   <button class="bt s" onclick="lbl('${x.id}')">طباعة البوليصة</button></div>`;
   return`<h2>تتبع شحنة</h2><div class="bar"><input id="tn" placeholder="أدخل رقم الشحنة، مثال MS-100001" value="${esc(TR)}" onkeydown="if(event.key==='Enter'){TR=this.value;render()}"><button class="bt" style="flex:0 0 auto" onclick="TR=$('#tn').value;render()">بحث</button></div>${out}`;
@@ -197,33 +242,85 @@ function lbl(id,o){
   const x=o||D.s.find(s=>s.id===id);let px=0,bars="";
   for(const ch of x.id){const w=1+ch.charCodeAt(0)%3;bars+=`<rect x="${px}" y="0" width="${w}" height="60"/>`;px+=w+1+ch.charCodeAt(0)%2}
   $("#lblbody").innerHTML=`<h3><span>مسار للشحن</span><span>${x.id}</span></h3><svg viewBox="0 0 ${px} 60" preserveAspectRatio="none" fill="#000">${bars}</svg><hr>
-  <div><b>إلى:</b> ${esc(x.rn)} — ${esc(x.rp)}</div><div>${esc(x.city)} (${ZN[x.z][0]})</div><hr>
-  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>الوزن: ${num(x.w)} كجم</div>
-  ${o||cm()?`<div class="cod">${x.cod?"تحصيل: "+money(x.cod):"مدفوعة مسبقًا"}</div>`:""}`;
+  <div><b>إلى:</b> ${esc(x.rn)} — ${esc(x.rp)}</div><div>${esc(x.city)} (${esc(x.gv||"")})</div><hr>
+  <div><b>من:</b> ${esc(x.sn)} ${esc(x.sp)}</div><div>الوزن: ${num(x.w)} كجم${x.pn?" · "+esc(x.pn)+" × "+num(x.qty||1):""}</div>
+  ${cm()?`<div class="cod">${x.cod?"تحصيل: "+money(x.cod):"مدفوعة مسبقًا"}</div>`:""}`;
   $("#lbl").classList.add("on");
 }
 
 let ME=null;
-const ROLE={owner:"مالك",admin:"أدمن",emp:"موظف"};
-const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",fin:"الحسابات",usr:"المستخدمون"};
-const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou",...(ME.money?["fin"]:[])]:["neu"];
+const ROLE={owner:"مالك",admin:"مدير",emp:"موظف"};
+const TN={dash:"لوحة التحكم",list:"الشحنات",neu:"شحنة جديدة",trk:"تتبع شحنة",cou:"المناديب",prod:"المنتجات",rates:"أسعار الشحن",fin:"الأموال",usr:"المستخدمون"};
+const tabs=()=>!ME?[]:ME.role==="owner"?["dash","list","neu","trk","cou","prod","rates","fin","usr"]:ME.role==="admin"?["dash","list","neu","trk","cou","prod","rates",...(ME.money?["fin"]:[])]:["neu"];
 const can=v=>tabs().includes(v);
 const cm=()=>!!ME&&(ME.role==="owner"||(ME.role==="admin"&&!!ME.money));
 const isO=()=>!!ME&&ME.role==="owner";
 function soft(){
   const v={};document.querySelectorAll("#app input[id],#app select[id]").forEach(e=>v[e.id]=e.type==="checkbox"?e.checked:e.value);
   const f=document.activeElement&&document.activeElement.id;render();
-  for(const k in v){if(V==="fin"&&k!==f)continue;const e=document.getElementById(k);if(e){if(e.type==="checkbox")e.checked=v[k];else e.value=v[k]}}
+  for(const k in v){if((V==="fin"||V==="rates"||V==="prod")&&k!==f)continue;const e=document.getElementById(k);if(e){if(e.type==="checkbox")e.checked=v[k];else e.value=v[k]}}
   if(f){const e=document.getElementById(f);if(e)e.focus()}
 }
-function merge(){D.s=RS.map(x=>({fee:0,cod:0,h:[{t:0}],...x,...(FN[x.id]||{})}));D.s.sort((a,b)=>a.h[0].t-b.h[0].t);soft()}
+function merge(){D.s=RS.map(x=>({fee:0,cod:0,h:[{t:0}],...x,...(FN[x.id]||{})}));D.s.sort((a,b)=>a.h[0].t-b.h[0].t);fix();soft()}
+function mergeP(){D.p=PD.map(p=>({unit:0,ws:0,...p,...(PR[p.id]||{})}));fix();soft()}
+function tot(){
+  const done=D.s.filter(x=>x.st==="done"),open=D.s.filter(x=>!["done","ret"].includes(x.st));
+  const sm=(a,k)=>a.reduce((t,x)=>t+(+x[k]||0),0);
+  return{col:sm(done,"cod"),fee:sm(done,"fee"),cost:sm(done,"cost"),open:sm(open,"cod"),wait:D.s.filter(x=>x.fee==null||x.cost==null).length};
+}
+function fix(){
+  if(!isO())return;
+  const b=db.batch();let n=0;
+  RS.forEach(x=>{const f=FN[x.id];if(!f||n>=400)return;const u={};
+    if(f.fee==null&&RATES&&RATES.p&&RATES.p[x.gv]!=null)u.fee=calcFee(x.gv,x.w);
+    if(f.cost==null&&PR[x.pid])u.cost=(+PR[x.pid].ws||0)*(x.qty||1);
+    if(Object.keys(u).length){b.update(db.doc("finance/"+x.id),u);n++}});
+  if(n)b.commit().catch(()=>{});
+}
+function prod(){
+  const ed=isO(),P=D.p,boxes=P.reduce((a,p)=>a+(+p.stock||0),0),val=P.reduce((a,p)=>a+(+p.stock||0)*(+p.ws||0),0);
+  const inp=(id,k,v)=>`<input type="number" min="0" id="${k}${id}" value="${v||0}" onchange="updProd('${id}')" style="width:100px;padding:4px 6px">`;
+  const tr=P.map(p=>`<tr><td><b>${esc(p.name)}</b></td><td>${ed?inp(p.id,"s",p.stock):num(p.stock)}</td><td>${ed?inp(p.id,"u",p.unit):money(p.unit)}</td><td>${ed?inp(p.id,"w",p.ws):money(p.ws)}</td><td>${money((p.stock||0)*(p.ws||0))}</td>${ed?`<td><button class="bt s" style="color:var(--dn)" onclick="delProd('${p.id}')">${DEL===p.id?"تأكيد الحذف":"حذف"}</button></td>`:""}</tr>`).join("")||`<tr><td colspan="6" class="mu">لا توجد منتجات مسجلة بعد.</td></tr>`;
+  return`<h2>المنتجات والمخزون</h2><div class="stats"><div class="st"><small>عدد العلب في الشركة</small><b>${num(boxes)}</b></div><div class="st"><small>قيمة المخزون بسعر الجملة</small><b>${money(val)}</b></div></div>
+  ${ed?`<div class="box"><b>إضافة منتج</b><div class="fg" style="margin-top:8px"><div><label>اسم المنتج</label><input id="pnm"></div><div><label>عدد العلب</label><input id="pst" type="number" min="0" value="0"></div><div><label>سعر العبوة (ج.م)</label><input id="pun" type="number" min="0" value="0"></div><div><label>سعر الجملة (ج.م)</label><input id="pws" type="number" min="0" value="0"></div></div><div style="margin-top:12px"><button class="bt" onclick="addProd()">إضافة</button></div></div>`:""}
+  <div class="box tw"><table><tr><th>المنتج</th><th>العلب في الشركة</th><th>سعر العبوة</th><th>سعر الجملة</th><th>قيمة المخزون</th>${ed?"<th></th>":""}</tr>${tr}</table></div><p class="mu">${ed?"عدّل أي رقم وسيُحفظ تلقائيًا. المخزون ينقص عند تسجيل الفاتورة ويرجع لو الشحنة اتحولت مرتجع.":"عرض فقط. التعديل للمالك."}</p>`;
+}
+function addProd(){
+  if(!isO())return;
+  const n=$("#pnm").value.trim();if(!n){toast("اكتب اسم المنتج");return}
+  const r=db.collection("products").doc(),b=db.batch();
+  b.set(r,{name:n,stock:+$("#pst").value||0});b.set(db.doc("prices/"+r.id),{unit:+$("#pun").value||0,ws:+$("#pws").value||0});
+  b.commit().then(()=>{toast("تمت إضافة المنتج");$("#pnm").value=""},fail);
+}
+function updProd(id){
+  if(!isO())return;
+  const b=db.batch();b.update(db.doc("products/"+id),{stock:+$("#s"+id).value||0});b.set(db.doc("prices/"+id),{unit:+$("#u"+id).value||0,ws:+$("#w"+id).value||0});
+  b.commit().then(()=>toast("تم الحفظ"),fail);
+}
+function delProd(id){
+  if(!isO())return;
+  if(DEL!==id){DEL=id;render();return}
+  DEL=null;const b=db.batch();b.delete(db.doc("products/"+id));b.delete(db.doc("prices/"+id));b.commit().then(()=>toast("تم حذف المنتج"),fail);
+}
+function rates(){
+  const ed=isO(),p=(RATES&&RATES.p)||{};
+  const cards=GOV.map((g,i)=>`<div class="st"><small>${g}</small>${ed?`<input type="number" min="0" id="gp${i}" value="${p[g]??""}">`:`<b>${p[g]!=null?money(p[g]):"غير محدد"}</b>`}</div>`).join("");
+  return`<h2>أسعار الشحن</h2><div class="box"><p class="mu">${ed?"حدد سعر الشحن لكل محافظة. أنت الوحيد القادر على التعديل.":"أسعار الشحن لكل محافظة. التعديل للمالك فقط."}</p><div class="cg">${cards}</div>
+  ${ed?`<div class="bar" style="margin-top:14px"><div><label>تكلفة كل كجم زائد (بعد أول كجم)</label><input type="number" min="0" id="kg" value="${RATES?RATES.kg??0:0}"></div><div><label>تطبيق سعر واحد على كل المحافظات</label><div style="display:flex;gap:6px"><input type="number" min="0" id="gall"><button class="bt s" onclick="fillAll()">تطبيق</button></div></div></div><button class="bt" onclick="saveRates()">حفظ الأسعار</button>`:`<p class="mu" style="margin-top:12px">كل كجم زائد بعد الأول: ${money(RATES?RATES.kg:0)}</p>`}</div>`;
+}
+function fillAll(){const v=$("#gall").value;GOV.forEach((g,i)=>$("#gp"+i).value=v)}
+function saveRates(){
+  if(!isO())return;const p={};
+  GOV.forEach((g,i)=>{const v=$("#gp"+i).value;if(v!=="")p[g]=+v});
+  db.doc("meta/rates").set({p,kg:+$("#kg").value||0}).then(()=>toast("تم حفظ أسعار الشحن"),fail);
+}
 function init(){
   if(!FB.apiKey){render();return}
   firebase.initializeApp(FB);db=firebase.firestore();auth=firebase.auth();auth.onAuthStateChanged(onAuth);
 }
 async function onAuth(u){
   if(BOOT)return;
-  unsubs.forEach(f=>f());unsubs=[];ME=null;D.s=[];D.c=[];D.u=[];RS=[];FN={};
+  unsubs.forEach(f=>f());unsubs=[];ME=null;D.s=[];D.c=[];D.u=[];RS=[];FN={};RATES=null;D.p=[];PD=[];PR={};
   try{
     if(!u){SETUP=(await db.doc("meta/setup").get()).exists;READY=true;return render()}
     const p=await db.doc("users/"+u.uid).get();
@@ -233,8 +330,11 @@ async function onAuth(u){
     const vis=c=>isO()?db.collection(c):db.collection(c).where("hidden","==",false);
     let first=true;
     sub(db.doc("users/"+u.uid),d=>{const n=d.data();if(first){first=false;return}if(!n||!n.active||n.role!==ME.role||!!n.money!==!!ME.money)onAuth(u)});
+    sub(db.collection("products"),s=>{PD=s.docs.map(d=>({id:d.id,...d.data()}));mergeP()});
     if(ME.role!=="emp"){
+      sub(db.collection("prices"),s=>{PR={};s.docs.forEach(d=>PR[d.id]=d.data());mergeP()});
       sub(vis("shipments"),s=>{RS=s.docs.map(d=>({id:d.id,...d.data()}));merge()});
+      sub(db.doc("meta/rates"),d=>{RATES=d.exists?d.data():{p:{},kg:0};merge()});
       sub(db.collection("couriers"),s=>{D.c=s.docs.map(d=>({id:d.id,...d.data()}));soft()});
     }
     if(cm())sub(vis("finance"),s=>{FN={};s.docs.forEach(d=>FN[d.id]=d.data());merge()});
@@ -267,25 +367,31 @@ function myPw(){
   auth.currentUser.updatePassword(p).then(()=>toast("تم تغيير كلمة السر"),()=>toast("سجّل الخروج وادخل من جديد ثم أعد المحاولة"));
 }
 function fin(){
-  const S=[...D.s].reverse(),tf=S.reduce((a,x)=>a+x.fee,0),tc=S.reduce((a,x)=>a+x.cod,0);
-  const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${badge(x.st)}</td><td><input type="number" min="0" id="c${x.id}" value="${x.cod}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td><td><input type="number" min="0" id="f${x.id}" value="${x.fee}" onchange="setFin('${x.id}')" style="width:110px;padding:4px 6px"></td></tr>`).join("")||`<tr><td colspan="4" class="mu">لا توجد فواتير بعد.</td></tr>`;
-  return`<h2>الحسابات</h2><div class="stats"><div class="st"><small>إجمالي الشحن</small><b>${money(tf)}</b></div><div class="st"><small>إجمالي التحصيل</small><b>${money(tc)}</b></div></div>
-  <div class="box tw"><table><tr><th>الفاتورة</th><th>الحالة</th><th>التحصيل (ج.م)</th><th>سعر الشحن (ج.م)</th></tr>${tr}</table></div><p class="mu">عدّل أي رقم وسيُحفظ تلقائيًا.</p>`;
+  const ed=isO(),S=[...D.s].reverse(),t=tot(),net=t.col-t.fee-t.cost;
+  const inp=(k,id,v)=>`<input type="number" min="0" id="${k}${id}" value="${v??""}" placeholder="بانتظار التسعير" onchange="setFin('${id}')" style="width:100px;padding:4px 6px">`;
+  const cell=(k,x,v)=>ed?inp(k,x.id,v):(v==null?"بانتظار التسعير":money(v));
+  const tr=S.map(x=>`<tr><td><b>${x.id}</b><div class="mu">${esc(x.rn)}</div></td><td>${esc(x.pn||"—")} × ${num(x.qty||1)}</td><td>${badge(x.st)}</td><td>${cell("c",x,x.cod)}</td><td>${cell("f",x,x.fee)}</td><td>${cell("k",x,x.cost)}</td><td>${x.fee==null||x.cost==null?"—":money(x.cod-x.fee-x.cost)}</td></tr>`).join("")||`<tr><td colspan="7" class="mu">لا توجد فواتير بعد.</td></tr>`;
+  return`<h2>الأموال</h2>
+  <div class="box"><span class="mu">مبلغ التحصيل النهائي (صافي الربح بعد خصم الشحن وسعر الجملة)</span><div style="font-size:30px;font-weight:700;color:var(--pr)">${money(net)}</div>
+  <p class="mu" style="margin:6px 0 0">${money(t.col)} محصّل − ${money(t.fee)} شحن − ${money(t.cost)} سعر جملة. محسوب على الفواتير المُسلَّمة فقط.${t.wait?` ${num(t.wait)} فاتورة بانتظار التسعير.`:""}</p></div>
+  <div class="stats"><div class="st"><small>إجمالي المحصّل (مُسلَّم)</small><b>${money(t.col)}</b></div><div class="st"><small>إجمالي الشحن</small><b>${money(t.fee)}</b></div><div class="st"><small>إجمالي سعر الجملة</small><b>${money(t.cost)}</b></div><div class="st"><small>قيد التحصيل (لم تُسلَّم)</small><b>${money(t.open)}</b></div></div>
+  <div class="box tw"><table><tr><th>الفاتورة</th><th>المنتج</th><th>الحالة</th><th>التحصيل</th><th>الشحن</th><th>سعر الجملة</th><th>الصافي</th></tr>${tr}</table></div><p class="mu">${ed?"عدّل أي رقم وسيُحفظ تلقائيًا.":"عرض فقط. التعديل للمالك."}</p>`;
 }
 function setFin(id){
-  if(!cm())return;
-  db.doc("finance/"+id).update({fee:+$("#f"+id).value||0,cod:+$("#c"+id).value||0}).then(()=>toast("تم حفظ السعر"),fail);
+  if(!isO())return;
+  const v=k=>{const e=$(k+id);return !e||e.value===""?null:+e.value};
+  db.doc("finance/"+id).update({cod:v("#c")||0,fee:v("#f"),cost:v("#k")}).then(()=>toast("تم الحفظ"),fail);
 }
 function usr(){
   const tr=D.u.map(k=>{const me=k.id===ME.id;
-    const role=me?`<span class="bd" style="color:var(--pr)">${ROLE[k.role]}</span>`:`<select aria-label="الدور" onchange="uRole('${k.id}',this.value)"><option value="admin"${k.role==="admin"?" selected":""}>أدمن</option><option value="emp"${k.role==="emp"?" selected":""}>موظف</option></select>`;
+    const role=me?`<span class="bd" style="color:var(--pr)">${ROLE[k.role]}</span>`:`<select aria-label="الدور" onchange="uRole('${k.id}',this.value)"><option value="admin"${k.role==="admin"?" selected":""}>مدير</option><option value="emp"${k.role==="emp"?" selected":""}>موظف</option></select>`;
     const mo=k.role==="owner"?"دائمًا":k.role==="admin"?`<label style="margin:0;color:var(--tx)"><input type="checkbox" style="width:auto" ${k.money?"checked":""} onchange="uMoney('${k.id}',this.checked)"> يرى الأموال</label>`:"لا";
     const act=me?"":`<button class="bt s" onclick="uActive('${k.id}',${!k.active})">${k.active?"تعطيل الحساب":"تفعيل الحساب"}</button>`;
     return`<tr><td><b>${esc(k.name)}</b><div class="mu">${esc(k.username)}${k.active?"":" · معطّل"}</div></td><td>${role}</td><td>${mo}</td><td>${act}</td></tr>`}).join("");
   return`<h2>المستخدمون والصلاحيات</h2>
   <div class="box"><div class="fg"><div><label>الاسم</label><input id="nn"></div><div><label>اسم المستخدم (إنجليزي)</label><input id="nu"></div><div><label>كلمة السر</label><input id="np" type="password" autocomplete="new-password"></div>
-  <div><label>الدور</label><select id="nr"><option value="emp">موظف: تسجيل شحنات جديدة فقط</option><option value="admin">أدمن: يعدّل على النظام</option></select></div></div>
-  <label style="margin-top:10px;color:var(--tx)"><input id="nm" type="checkbox" style="width:auto"> السماح للأدمن برؤية الأموال والحسابات</label>
+  <div><label>الدور</label><select id="nr"><option value="emp">موظف: تسجيل شحنات جديدة فقط</option><option value="admin">مدير: يعدّل على النظام</option></select></div></div>
+  <label style="margin-top:10px;color:var(--tx)"><input id="nm" type="checkbox" style="width:auto"> السماح للمدير برؤية الأموال والحسابات</label>
   <div style="margin-top:12px"><button class="bt" onclick="addU()">إضافة مستخدم</button></div></div>
   <div class="box tw"><table><tr><th>المستخدم</th><th>الدور</th><th>رؤية الأموال</th><th></th></tr>${tr}</table></div>`;
 }
@@ -302,7 +408,7 @@ async function addU(){
   }catch(e){toast(e.code==="auth/email-already-in-use"?"اسم المستخدم مستخدم بالفعل":"تعذّر إنشاء الحساب")}
 }
 function uRole(id,r){if(isO())db.doc("users/"+id).update(r==="admin"?{role:r}:{role:r,money:false}).catch(fail)}
-function uMoney(id,v){if(isO())db.doc("users/"+id).update({money:v}).then(()=>toast(v?"تم السماح للأدمن برؤية الأموال":"تم منع الأدمن من رؤية الأموال"),fail)}
+function uMoney(id,v){if(isO())db.doc("users/"+id).update({money:v}).then(()=>toast(v?"تم السماح للمدير برؤية الأموال":"تم منع المدير من رؤية الأموال"),fail)}
 function uActive(id,v){if(isO()&&id!==ME.id)db.doc("users/"+id).update({active:v}).then(()=>toast(v?"تم تفعيل الحساب":"تم تعطيل الحساب"),fail)}
 init();
 </script>
